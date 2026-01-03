@@ -85,7 +85,7 @@ export const handleQuoteRequest = async (req, res) => {
              <p style="margin:0; font-weight:bold;">What's Next?</p>
              <ul style="margin:10px 0; padding-left:20px;">
                 <li>A consultant from our Pretoria or Burgersfort office will review your file.</li>
-                <li>Keep your ID copy and credit report (if any) ready for the consultation.</li>
+                <li>Keep your ID copy and a consultaion fee of R350 for the consultation.</li>
              </ul>
           </div>
 
