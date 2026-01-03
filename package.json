@@ -1,0 +1,16 @@
+{
+  "name": "debtors-backend",
+  "version": "1.0.0",
+  "description": "MKH DEBTORS ASSOCIATES ",
+  "repository": {
+    "type": "git",
+    "url": "git remote add origin https://github.com/Mugwena14/debtors-backend.git"
+  },
+  "license": "ISC",
+  "author": "Makhubele Langavi Clyde",
+  "type": "commonjs",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  }
+}
