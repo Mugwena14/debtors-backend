@@ -8,4 +8,10 @@ router.get('/', getClients);
 // Route: POST /api/clients
 router.post('/', addClient);
 
+// Route: /api/clients/:id
+router.put('/:id', updateClient);
+
+// Route: /api/clients/:id
+router.delete('/:id', deleteClient); 
+
 export default router;
