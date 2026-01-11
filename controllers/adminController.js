@@ -99,8 +99,7 @@ export const uploadReceivedDocument = async (req, res) => {
 };
 
 /**
- * NEW: 3. UPDATE DOCUMENT STATUS (Manual Toggle)
- * Updates status to 'Received' or 'Pending' without requiring a file upload
+ * 3. UPDATE DOCUMENT STATUS (Manual Toggle)
  */
 export const updateDocumentStatus = async (req, res) => {
   const { requestId } = req.params;
@@ -111,7 +110,6 @@ export const updateDocumentStatus = async (req, res) => {
       requestId,
       { 
         status, 
-        // If marked as Received manually, we set the date
         dateReceived: status === 'Received' ? new Date() : null 
       },
       { new: true }
@@ -133,20 +131,14 @@ export const updateDocumentStatus = async (req, res) => {
 };
 
 /**
- * 4. DELETE  REQUESTS
+ * 4. DELETE REQUESTS
  */
-
 export const deleteDocumentRequest = async (req, res) => {
   try {
     const { requestId } = req.params;
-
-    // Check if the record exists
     const request = await DocumentRequest.findById(requestId);
     if (!request) {
-      return res.status(404).json({
-        success: false,
-        message: "Document request not found."
-      });
+      return res.status(404).json({ success: false, message: "Document request not found." });
     }
 
     await DocumentRequest.findByIdAndDelete(requestId);
@@ -157,26 +149,22 @@ export const deleteDocumentRequest = async (req, res) => {
     });
   } catch (error) {
     console.error("Delete Error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Internal server error while deleting record."
-    });
+    res.status(500).json({ success: false, message: "Internal server error while deleting record." });
   }
 };
 
 /**
- * 5. GET DASHBOARD STATS
+ * 5. GET DASHBOARD STATS (UPDATED)
  */
-
 export const getDashboardStats = async (req, res) => {
   try {
-    // 1. Count Active Clients (Assuming you have a Client model)
-    const activeClients = await Client.countDocuments({ status: 'Active' });
+    // We count documents where accountStatus is either 'Lead' or 'Client'
+    // This matches your actual database field 'accountStatus'
+    const activeClients = await Client.countDocuments({ 
+      accountStatus: { $in: ['Lead', 'Client'] } 
+    });
 
-    // 2. Count Pending Document Requests
     const pendingDocs = await DocumentRequest.countDocuments({ status: 'Pending' });
-
-    // 3. Count Completed (Received) Document Requests
     const completedDocs = await DocumentRequest.countDocuments({ status: 'Received' });
 
     res.status(200).json({
@@ -199,7 +187,7 @@ export const getAllDocumentRequests = async (req, res) => {
   try {
     const logs = await DocumentRequest.find()
       .populate('client', 'name phoneNumber')
-      .sort({ dateRequested: -1 });
+      .sort({ createdAt: -1 }); // Using createdAt since your model has timestamps
     res.status(200).json({ success: true, data: logs });
   } catch (error) {
     res.status(500).json({ success: false, message: "Could not fetch logs." });
