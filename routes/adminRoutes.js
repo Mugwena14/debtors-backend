@@ -4,7 +4,8 @@ import {
   requestPaidUpLetter, 
   uploadReceivedDocument, 
   getAllDocumentRequests,
-  updateDocumentStatus // Added this import
+  updateDocumentStatus,
+  deleteDocumentRequest
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -20,7 +21,6 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-
 // 1. Send email to creditor via Brevo
 router.post('/request-document', requestPaidUpLetter);
 
@@ -30,7 +30,11 @@ router.get('/logs', getAllDocumentRequests);
 // 3. Upload the reply document (Keep this for when you DO have a file)
 router.put('/upload-document/:requestId', upload.single('paidUpLetter'), uploadReceivedDocument);
 
-// 4. NEW: Update the status manually (Mark as Received without file)
+// 4. Update the status manually (Mark as Received without file)
 router.put('/update-status/:requestId', updateDocumentStatus);
+
+// 5. NEW: Delete a request record
+// This matches your frontend call: axios.delete(`${API_BASE_URL}/delete-request/${requestId}`)
+router.delete('/delete-request/:requestId', deleteDocumentRequest);
 
 export default router;
