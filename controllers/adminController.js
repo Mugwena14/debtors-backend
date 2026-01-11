@@ -165,7 +165,35 @@ export const deleteDocumentRequest = async (req, res) => {
 };
 
 /**
- * 5. GET ALL REQUESTS
+ * 5. GET DASHBOARD STATS
+ */
+
+export const getDashboardStats = async (req, res) => {
+  try {
+    // 1. Count Active Clients (Assuming you have a Client model)
+    const activeClients = await Client.countDocuments({ status: 'Active' });
+
+    // 2. Count Pending Document Requests
+    const pendingDocs = await DocumentRequest.countDocuments({ status: 'Pending' });
+
+    // 3. Count Completed (Received) Document Requests
+    const completedDocs = await DocumentRequest.countDocuments({ status: 'Received' });
+
+    res.status(200).json({
+      success: true,
+      stats: {
+        activeClients,
+        pendingDocs,
+        completedDocs
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+/**
+ * 6. GET ALL REQUESTS
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
