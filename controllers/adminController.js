@@ -154,18 +154,24 @@ export const deleteDocumentRequest = async (req, res) => {
 };
 
 /**
- * 5. GET DASHBOARD STATS (UPDATED)
+ * 5. GET DASHBOARD STATS (UPDATED WITH RECENT REQUESTS)
  */
 export const getDashboardStats = async (req, res) => {
   try {
-    // We count documents where accountStatus is either 'Lead' or 'Client'
-    // This matches your actual database field 'accountStatus'
+    // 1. Count Active Clients/Leads using accountStatus field
     const activeClients = await Client.countDocuments({ 
       accountStatus: { $in: ['Lead', 'Client'] } 
     });
 
+    // 2. Count Document Request Statuses
     const pendingDocs = await DocumentRequest.countDocuments({ status: 'Pending' });
     const completedDocs = await DocumentRequest.countDocuments({ status: 'Received' });
+
+    // 3. Fetch Recent Activity: Get last 5 requests, newest first
+    const recentRequests = await DocumentRequest.find()
+      .populate('client', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5);
 
     res.status(200).json({
       success: true,
@@ -173,9 +179,11 @@ export const getDashboardStats = async (req, res) => {
         activeClients,
         pendingDocs,
         completedDocs
-      }
+      },
+      recentRequests
     });
   } catch (error) {
+    console.error("Dashboard Stats Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -187,7 +195,7 @@ export const getAllDocumentRequests = async (req, res) => {
   try {
     const logs = await DocumentRequest.find()
       .populate('client', 'name phoneNumber')
-      .sort({ createdAt: -1 }); // Using createdAt since your model has timestamps
+      .sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: logs });
   } catch (error) {
     res.status(500).json({ success: false, message: "Could not fetch logs." });
