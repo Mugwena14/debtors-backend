@@ -111,7 +111,7 @@ export const updateDocumentStatus = async (req, res) => {
       requestId,
       { 
         status, 
-        // If we mark as Received manually, we set the date, otherwise we clear it if reverting to Pending
+        // If marked as Received manually, we set the date
         dateReceived: status === 'Received' ? new Date() : null 
       },
       { new: true }
@@ -133,7 +133,39 @@ export const updateDocumentStatus = async (req, res) => {
 };
 
 /**
- * 4. GET ALL REQUESTS
+ * 4. DELETE  REQUESTS
+ */
+
+export const deleteDocumentRequest = async (req, res) => {
+  try {
+    const { requestId } = req.params;
+
+    // Check if the record exists
+    const request = await DocumentRequest.findById(requestId);
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Document request not found."
+      });
+    }
+
+    await DocumentRequest.findByIdAndDelete(requestId);
+
+    res.status(200).json({
+      success: true,
+      message: "Request record deleted successfully."
+    });
+  } catch (error) {
+    console.error("Delete Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Internal server error while deleting record."
+    });
+  }
+};
+
+/**
+ * 5. GET ALL REQUESTS
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
