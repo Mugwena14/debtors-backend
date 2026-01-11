@@ -3,7 +3,8 @@ import multer from 'multer';
 import { 
   requestPaidUpLetter, 
   uploadReceivedDocument, 
-  getAllDocumentRequests 
+  getAllDocumentRequests,
+  updateDocumentStatus // Added this import
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -20,13 +21,16 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-// Send email to creditor via Brevo
+// 1. Send email to creditor via Brevo
 router.post('/request-document', requestPaidUpLetter);
 
-// Fetch all request logs for the dashboard
+// 2. Fetch all request logs for the dashboard
 router.get('/logs', getAllDocumentRequests);
 
-// Upload the reply document
+// 3. Upload the reply document (Keep this for when you DO have a file)
 router.put('/upload-document/:requestId', upload.single('paidUpLetter'), uploadReceivedDocument);
+
+// 4. NEW: Update the status manually (Mark as Received without file)
+router.put('/update-status/:requestId', updateDocumentStatus);
 
 export default router;
