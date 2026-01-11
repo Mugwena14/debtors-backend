@@ -5,7 +5,8 @@ import {
   uploadReceivedDocument, 
   getAllDocumentRequests,
   updateDocumentStatus,
-  deleteDocumentRequest
+  deleteDocumentRequest,
+  getDashboardStats
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -33,8 +34,10 @@ router.put('/upload-document/:requestId', upload.single('paidUpLetter'), uploadR
 // 4. Update the status manually (Mark as Received without file)
 router.put('/update-status/:requestId', updateDocumentStatus);
 
-// 5. NEW: Delete a request record
-// This matches your frontend call: axios.delete(`${API_BASE_URL}/delete-request/${requestId}`)
+// 5. Delete a request record
 router.delete('/delete-request/:requestId', deleteDocumentRequest);
+
+// 6. Get Dashboard stats
+router.get('/stats', getDashboardStats);
 
 export default router;
