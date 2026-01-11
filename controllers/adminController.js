@@ -1,22 +1,19 @@
-import apiInstance from "../config/brevo.js"; // Import the working instance
+import apiInstance from "../config/brevo.js"; 
 import DocumentRequest from '../models/DocumentRequest.js';
 import Client from '../models/Client.js';
 
 /**
  * 1. REQUEST PAID-UP LETTER
- * Uses the proven apiInstance (SDK) to send emails via Brevo
  */
 export const requestPaidUpLetter = async (req, res) => {
   const { idNumber, creditorName, creditorEmail } = req.body;
 
   try {
-    // 1. Verify Client exists
     const client = await Client.findOne({ idNumber });
     if (!client) {
       return res.status(404).json({ success: false, message: "Client ID not found in database." });
     }
 
-    // 2. Prepare Brevo Email Payload using the SDK structure
     const emailData = {
       sender: { name: "MKH Admin", email: process.env.ADMIN_EMAIL },
       to: [{ email: creditorEmail, name: creditorName }],
@@ -38,10 +35,8 @@ export const requestPaidUpLetter = async (req, res) => {
       `
     };
 
-    // 3. Send via Brevo SDK Instance (Matches your Quote Controller logic)
     await apiInstance.sendTransacEmail(emailData);
 
-    // 4. Create record in DocumentRequest collection
     const newRequest = await DocumentRequest.create({
       client: client._id,
       idNumber: idNumber,
@@ -57,7 +52,6 @@ export const requestPaidUpLetter = async (req, res) => {
     });
 
   } catch (error) {
-    // Better error logging for the SDK
     console.error("Brevo SDK Error:", error.response?.data || error.message);
     res.status(500).json({ 
       success: false, 
@@ -67,13 +61,10 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * 2. UPLOAD RECEIVED DOCUMENT (Option A)
- * Manually update a pending request with the file URL received via email.
+ * 2. UPLOAD RECEIVED DOCUMENT
  */
 export const uploadReceivedDocument = async (req, res) => {
   const { requestId } = req.params;
-  
-  // Use path from Multer (req.file.path)
   const fileUrl = req.file ? req.file.path : req.body.fileUrl;
 
   if (!fileUrl) {
@@ -108,8 +99,41 @@ export const uploadReceivedDocument = async (req, res) => {
 };
 
 /**
- * 3. GET ALL REQUESTS
- * Fetches history for the admin dashboard
+ * NEW: 3. UPDATE DOCUMENT STATUS (Manual Toggle)
+ * Updates status to 'Received' or 'Pending' without requiring a file upload
+ */
+export const updateDocumentStatus = async (req, res) => {
+  const { requestId } = req.params;
+  const { status } = req.body;
+
+  try {
+    const updatedRequest = await DocumentRequest.findByIdAndUpdate(
+      requestId,
+      { 
+        status, 
+        // If we mark as Received manually, we set the date, otherwise we clear it if reverting to Pending
+        dateReceived: status === 'Received' ? new Date() : null 
+      },
+      { new: true }
+    );
+
+    if (!updatedRequest) {
+      return res.status(404).json({ success: false, message: "Document request not found." });
+    }
+
+    res.status(200).json({ 
+      success: true, 
+      message: `Status updated to ${status}`, 
+      data: updatedRequest 
+    });
+  } catch (error) {
+    console.error("Status Update Error:", error);
+    res.status(500).json({ success: false, message: "Failed to update status." });
+  }
+};
+
+/**
+ * 4. GET ALL REQUESTS
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
