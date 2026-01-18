@@ -10,10 +10,17 @@ const ClientSchema = new mongoose.Schema({
     enum: ['Lead', 'Active', 'Closed'], 
     default: 'Lead' 
   },
-  // Conversation flow states: 'AWAITING_ID', 'ONBOARDING_NAME', 'ONBOARDING_EMAIL', 'MAIN_MENU'
   sessionState: { 
     type: String, 
     default: 'AWAITING_ID' 
+  },
+  // --- NEW: Short-term memory for guided service requests ---
+  tempRequest: {
+    creditorName: { type: String, default: '' },
+    requestIdNumber: { type: String, default: '' },
+    poaUrl: { type: String, default: '' },
+    porUrl: { type: String, default: '' },
+    lastActivity: { type: Date, default: Date.now }
   },
   documents: [{
     docType: String,
