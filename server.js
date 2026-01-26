@@ -18,15 +18,38 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Database Connection
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('🍃 MongoDB Connected'))
-  .catch(err => console.error('❌ MongoDB Connection Error:', err));
+// --- DATABASE CONNECTION ---
+// We use a check to prevent the "undefined" string error
+const mongoURI = process.env.MONGODB_URI;
 
-// Middleware
+if (!mongoURI) {
+    console.error('❌ MONGODB_URI is missing from .env or Render Environment Variables!');
+} else {
+    mongoose.connect(mongoURI)
+      .then(() => console.log('🍃 MongoDB Connected'))
+      .catch(err => console.error('❌ MongoDB Connection Error:', err));
+}
+
+// CORS CONFIGURATION
+const allowedOrigins = [
+  'http://localhost:5173',
+  'https://mkhdebtors.co.za',
+  'https://www.mkhdebtors.co.za'
+];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL,
-  methods: ['POST', 'GET', 'PUT', 'DELETE']
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      const msg = `The CORS policy for this site does not allow access from origin: ${origin}`;
+      return callback(new Error(msg), false);
+    }
+    return callback(null, true);
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  credentials: true,
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 app.use(express.json()); 
@@ -42,18 +65,10 @@ const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 } 
 });
 
-// Routes
-
-// Quote Route
+// --- ROUTES ---
 app.post('/api/quote', upload.array('idCopy', 2), handleQuoteRequest);
-
-// Chatbot Route
 app.use('/whatsapp', chatbotRoutes);
-
-// Admin Management
 app.use('/api/admin', adminRoutes);
-
-// Client Management Routes 
 app.use('/api/clients', clientRoutes); 
 
 const PORT = process.env.PORT || 5000;
