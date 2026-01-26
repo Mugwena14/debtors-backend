@@ -2,15 +2,13 @@ import apiInstance from "../config/brevo.js";
 
 export const handleQuoteRequest = async (req, res) => {
   try {
-    // Corrected destructuring to match your frontend payload
     const { name, email, phone, service, whatsaap, message } = req.body;
 
-    // Use the specific WhatsApp field for the link, fallback to phone if whatsaap is empty
     const whatsappTarget = whatsaap || phone;
     const cleanWhatsApp = whatsappTarget ? whatsappTarget.replace(/\D/g, '') : '';
     const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
 
-    // Process attachments (ID Copy) from Multer
+    // ID Copy from Multer
     const attachments = req.files?.length
       ? req.files.map((file) => ({
           name: file.originalname,
@@ -18,9 +16,8 @@ export const handleQuoteRequest = async (req, res) => {
         }))
       : null;
 
-    // -------------------
-    // 1. Admin Email (Internal Lead)
-    // -------------------
+    // Admin Email 
+
     const adminEmail = {
       sender: { email: process.env.ADMIN_EMAIL, name: "MKH Web Portal" },
       to: [{ email: process.env.ADMIN_EMAIL }],
@@ -64,9 +61,8 @@ export const handleQuoteRequest = async (req, res) => {
 
     await apiInstance.sendTransacEmail(adminEmail);
 
-    // -------------------
-    // 2. Client Confirmation Email
-    // -------------------
+    // Client Confirmation Email
+
     await apiInstance.sendTransacEmail({
       sender: { email: process.env.ADMIN_EMAIL, name: "MKH Debtors Associates" },
       to: [{ email: email }],

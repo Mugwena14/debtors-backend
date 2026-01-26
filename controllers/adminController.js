@@ -3,7 +3,7 @@ import DocumentRequest from '../models/DocumentRequest.js';
 import Client from '../models/Client.js';
 
 /**
- * 1. REQUEST PAID-UP LETTER
+ * REQUEST PAID-UP LETTER
  */
 export const requestPaidUpLetter = async (req, res) => {
   const { idNumber, creditorName, creditorEmail } = req.body;
@@ -61,7 +61,7 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * 2. UPLOAD RECEIVED DOCUMENT
+ * UPLOAD RECEIVED DOCUMENT
  */
 export const uploadReceivedDocument = async (req, res) => {
   const { requestId } = req.params;
@@ -131,7 +131,7 @@ export const updateDocumentStatus = async (req, res) => {
 };
 
 /**
- * 4. DELETE REQUESTS
+ * DELETE REQUESTS
  */
 export const deleteDocumentRequest = async (req, res) => {
   try {
@@ -154,7 +154,7 @@ export const deleteDocumentRequest = async (req, res) => {
 };
 
 /**
- * 5. GET DASHBOARD STATS (UPDATED WITH RECENT REQUESTS)
+ * GET DASHBOARD STATS
  */
 export const getDashboardStats = async (req, res) => {
   try {
@@ -189,7 +189,7 @@ export const getDashboardStats = async (req, res) => {
 };
 
 /**
- * 6. GET ALL REQUESTS
+ * GET ALL REQUESTS
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {

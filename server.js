@@ -18,12 +18,12 @@ const app = express();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// 1. Database Connection
+// Database Connection
 mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('🍃 MongoDB Connected'))
   .catch(err => console.error('❌ MongoDB Connection Error:', err));
 
-// 2. Middleware
+// Middleware
 app.use(cors({
   origin: process.env.FRONTEND_URL || 'http://localhost:5173',
   methods: ['POST', 'GET', 'PUT', 'DELETE']
@@ -35,14 +35,14 @@ app.use(express.urlencoded({ extended: false }));
 // Serve uploaded documents as static files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// 3. Multer Configuration (Standard for Quotes)
+// Multer Configuration for Quotes
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
   limits: { fileSize: 5 * 1024 * 1024 } 
 });
 
-// 4. Routes
+// Routes
 
 // Quote Route
 app.post('/api/quote', upload.array('idCopy', 2), handleQuoteRequest);
@@ -50,7 +50,7 @@ app.post('/api/quote', upload.array('idCopy', 2), handleQuoteRequest);
 // Chatbot Route
 app.use('/whatsapp', chatbotRoutes);
 
-// Admin Management Routes (Brevo, Logs, etc.)
+// Admin Management
 app.use('/api/admin', adminRoutes);
 
 // Client Management Routes 
