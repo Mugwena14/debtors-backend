@@ -6,7 +6,6 @@ import ServiceRequest from '../models/serviceRequest.js';
 // Service Imports
 import { handlePaidUpService } from '../services/paidUpService.js';
 import { handlePrescriptionService } from '../services/prescriptionService.js';
-import { handleCreditReportService } from '../services/creditReportService.js';
 import { handleNegotiationService } from '../services/negotiationService.js';
 import { handleCarAppService } from '../services/carAppService.js';
 import { handleFileUpdateService } from '../services/fileUpdateService.js';
@@ -47,91 +46,85 @@ export const handleIncomingMessage = async (req, res) => {
             return sendTwiML(client);
         }
 
-        // 2. HI / RESET / MENU HANDLER
+        // 2. HI / RESET / MENU HANDLER (Global Override)
         if (['hi', 'menu', 'hello', '0'].includes(rawBody.toLowerCase())) {
             client.sessionState = 'MAIN_MENU';
+            client.tempRequest = {}; 
             await client.save();
             await sendMainMenuButtons(fromNumber, client.name);
             return sendTwiML(client);
         }
 
-        // 3. NUMBER & BUTTON PAYLOAD HANDLER
-        switch (buttonPayload) {
-            case '1':
-            case 'VIEW_SERVICES':
-                await sendServicesMenu(fromNumber);
-                return sendTwiML(client);
+        // 3. MENU SELECTION LOGIC
+        const isInMenuState = ['MAIN_MENU', 'SERVICES_MENU'].includes(client.sessionState);
 
-            case '2':
-            case 'SERVICE_PAID_UP':
-                client.tempRequest = { serviceType: 'PAID_UP_LETTER', creditorName: '', requestIdNumber: '', lastActivity: new Date() };
-                client.sessionState = 'AWAITING_CREDITOR_NAME';
-                twiml.message("✅ *Paid Up Letter*\n\nPlease type the *Name of the Creditor*.");
-                return sendTwiML(client);
+        if (isInMenuState) {
+            switch (buttonPayload) {
+                case '1':
+                case 'VIEW_SERVICES':
+                    client.sessionState = 'SERVICES_MENU';
+                    await sendServicesMenu(fromNumber);
+                    return sendTwiML(client);
 
-            case '3':
-            case 'SERVICE_PRESCRIPTION':
-                client.tempRequest = { serviceType: 'PRESCRIPTION', creditorName: '', lastActivity: new Date() };
-                client.sessionState = 'AWAITING_PRES_CREDITOR';
-                twiml.message("📜 *Prescription Letter*\n\nWhat is the *Name of the Creditor*?");
-                return sendTwiML(client);
+                case '2':
+                case 'SERVICE_PAID_UP':
+                    client.tempRequest = { serviceType: 'PAID_UP_LETTER', creditorName: '', lastActivity: new Date() };
+                    client.sessionState = 'AWAITING_CREDITOR_NAME';
+                    twiml.message("✅ *Paid Up Letter*\n\nPlease type the *Name of the Creditor*.\n\n_Examples: Capitec, Absa, Sanlam, etc._");
+                    return sendTwiML(client);
 
-            case '4':
-            case 'SERVICE_CREDIT_REPORT':
-                client.tempRequest = { serviceType: 'CREDIT_REPORT', creditorName: 'Credit Report Consultation', lastActivity: new Date() };
-                client.sessionState = 'AWAITING_REPORT_CONSULTATION';
-            twiml.message(
-                    `📊 *Credit Report*\n\n` +
-                    `To pull your report, a fee of *R350* is required.\n\n` +
-                    `*Bank Details:*\n` +
-                    `Bank: *First National Bank (FNB)*\n` +
-                    `Account Holder: *MKH Debtors Associates*\n` +
-                    `Account No: *63140304302*\n` +
-                    `Branch: *255355*\n` +
-                    `Ref: *${client.name}*\n\n` +
-                    `Once paid, please upload your *Proof of Payment* here.`
-                );                
-            return sendTwiML(client);
+                case '3':
+                case 'SERVICE_PRESCRIPTION':
+                    client.tempRequest = { serviceType: 'PRESCRIPTION', creditorName: '', lastActivity: new Date() };
+                    client.sessionState = 'AWAITING_PRES_CREDITOR';
+                    twiml.message("📜 *Prescription Letter*\n\nWhat is the *Name of the Creditor*?\n\n_Examples: Capitec, Absa, Sanlam, etc._");
+                    return sendTwiML(client);
 
-            case '5':
-            case 'SERVICE_SETTLEMENT':
-            case 'SERVICE_DEFAULT':
-            case 'SERVICE_ARRANGEMENT':
-                client.tempRequest = { creditorName: '', serviceType: 'NEGOTIATION', lastActivity: new Date() };
-                client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
-                twiml.message(`🤝 *Negotiation Request*\n\nPlease type the *Name of the Creditor* you want to negotiate with.`);
-                return sendTwiML(client);
+                case '4':
+                case 'SERVICE_CREDIT_REPORT':
+                    // Routing Credit Report to Negotiation Logic
+                    client.tempRequest = { serviceType: 'CREDIT_REPORT', creditorName: 'Bureau Report', lastActivity: new Date() };
+                    client.sessionState = 'AWAITING_PAYMENT_METHOD';
+                    twiml.message(
+                        `📊 *Credit Report*\n\n` +
+                        `To pull your report, a fee of *R350* is required.\n\n` +
+                        `*Bank Details:*\n` +
+                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *${client.name}*\n\n` +
+                        `*Confirm Payment Plan:*\n1️⃣ Monthly Installments\n2️⃣ Once-off Settlement\n3️⃣ Full Payment`
+                    );                
+                    return sendTwiML(client);
 
-            case '6':
-            case 'SERVICE_JUDGMENT':
-                await saveRequestToDatabase(client, 'JUDGMENT_REMOVAL');
-                twiml.message(`⚖️ *Judgment Removal*\n\nAn agent will contact you shortly, or you can call us:\n\n📞 +27820000000`);
-                client.sessionState = 'MAIN_MENU';
-                return sendTwiML(client);
+                case '5':
+                case 'SERVICE_NEGOTIATION':
+                    client.tempRequest = { serviceType: 'DEBT_REVIEW_REMOVAL', creditorName: '', lastActivity: new Date() };
+                    client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
+                    twiml.message(`🤝 *Debt Review Removal*\n\nPlease type the *Name of the Creditor* or Institution involved.`);
+                    return sendTwiML(client);
 
-            case '7':
-            case 'SERVICE_CAR_APP':
-                client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
-                client.sessionState = 'AWAITING_CAR_DOCS';
-                twiml.message("🚗 *Car Finance Application*\n\nPlease upload **ONE PDF** containing your Bank Statements, Payslips, and ID Copy.");
-                return sendTwiML(client);
+                case '6':
+                case 'SERVICE_JUDGMENT':
+                    client.tempRequest = { serviceType: 'JUDGMENT_REMOVAL', creditorName: '', lastActivity: new Date() };
+                    client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
+                    twiml.message(`⚖️ *Judgment Removal*\n\nPlease type the *Name of the Creditor* associated with this Judgment.`);
+                    return sendTwiML(client);
 
-            case '8':
-            case 'SERVICE_FILE_UPDATE':
-                client.sessionState = 'AWAITING_FILE_UPDATE_INFO';
-                const initialUpdate = await handleFileUpdateService(client, rawBody);
-                twiml.message(initialUpdate.text);
-                return sendTwiML(client);
+                case '7':
+                case 'SERVICE_CAR_APP':
+                    client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
+                    client.sessionState = 'AWAITING_CAR_DOCS';
+                    twiml.message("🚗 *Car Finance Application*\n\nPlease upload **ONE PDF** containing your Bank Statements, Payslips, and ID Copy.");
+                    return sendTwiML(client);
 
-            case 'RESET_REQUEST':
-                client.tempRequest = {};
-                client.sessionState = 'MAIN_MENU';
-                await client.save();
-                await sendMainMenuButtons(fromNumber, client.name);
-                return sendTwiML(client);
+                case '8':
+                case 'SERVICE_FILE_UPDATE':
+                    client.sessionState = 'AWAITING_FILE_UPDATE_INFO';
+                    const initialUpdate = await handleFileUpdateService(client, rawBody);
+                    twiml.message(initialUpdate.text);
+                    return sendTwiML(client);
+            }
         }
 
-        // 4. SESSION ROUTING
+        // 4. SESSION ROUTING (Active Service Handling)
         let serviceResponse = null;
 
         switch (client.sessionState) {
@@ -154,13 +147,17 @@ export const handleIncomingMessage = async (req, res) => {
                 await sendMainMenuButtons(fromNumber, client.name);
                 return sendTwiML(client);
 
-            case 'MAIN_MENU':
-                await sendMainMenuButtons(fromNumber, client.name);
-                return sendTwiML(client);
-
             default:
-                if (client.sessionState === 'AWAITING_REPORT_CONSULTATION') {
-                    serviceResponse = await handleCreditReportService(client, rawBody, mediaUrl, contentType);
+                // Universal Negotiation/Document Flow states
+                const negotiationStates = [
+                    'AWAITING_NEGOTIATION_CREDITOR', 
+                    'AWAITING_PAYMENT_METHOD', 
+                    'AWAITING_NEG_POA', 
+                    'AWAITING_NEG_POR'
+                ];
+
+                if (negotiationStates.includes(client.sessionState)) {
+                    serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, contentType, buttonPayload);
                 } 
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
@@ -171,10 +168,7 @@ export const handleIncomingMessage = async (req, res) => {
                 else if (client.sessionState.startsWith('AWAITING_PRES') || client.sessionState.includes('SUMMONS')) {
                     serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
                 } 
-                else if (client.sessionState.includes('NEGOTIATION')) {
-                    serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, contentType, buttonPayload);
-                }
-                else {
+                else if (client.sessionState !== 'MAIN_MENU') {
                     serviceResponse = await handlePaidUpService(client, rawBody, mediaUrl, contentType);
                 }
                 break;
@@ -187,22 +181,18 @@ export const handleIncomingMessage = async (req, res) => {
                     await twilioClient.messages.create({
                         from: MY_TWILIO_NUMBER,
                         to: fromNumber,
-                        body: "📄 Please find the Power of Attorney document attached. Download, sign, and upload it back here.",
+                        body: "📄 Please find the Power of Attorney template below. Download, sign, and upload it back here as a *DOCUMENT*.",
                         mediaUrl: [process.env.POA_TEMPLATE_URL] 
                     });
-                } catch (err) {
-                    console.error("❌ Failed to send POA PDF:", err.message);
-                }
+                } catch (err) { console.error("❌ POA Send Error:", err.message); }
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                // Determine service type for DB save (use query type if File Update)
                 const sType = client.tempRequest.serviceType || 'SERVICE_QUERY';
                 await saveRequestToDatabase(client, sType);
-                
                 client.sessionState = 'MAIN_MENU';
                 client.tempRequest = {}; 
-                twiml.message(serviceResponse.text + "\n\nReply *0* to return to the Main Menu.");
+                twiml.message(serviceResponse.text + "\n\nReply *0* for the Main Menu.");
             } else {
                 twiml.message(serviceResponse.text);
             }
@@ -219,14 +209,14 @@ export const handleIncomingMessage = async (req, res) => {
 // --- HELPERS ---
 
 async function sendMainMenuButtons(to, name) {
-    const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n2️⃣ Reset Session\n\n_Type 'Hi' anytime to see this menu._`;
+    const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n0️⃣ Reset Session`;
     try {
         await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body });
     } catch (err) { console.error("Menu Error:", err.message); }
 }
 
 async function sendServicesMenu(to) {
-    const body = `🛠 *Our Services*\nWhich service do you require?\n\n*Reply with a number:*\n2️⃣ Paid Up Letter\n3️⃣ Prescription Letter\n4️⃣ Credit Report\n5️⃣ Debt Review Removal\n6️⃣ Judgment Removal\n7️⃣ Car Finance Application\n8️⃣ File Updates 📂\n\n0️⃣ *Back to Main Menu*`;
+    const body = `🛠 *Our Services*\n\n2️⃣ Paid Up Letter\n3️⃣ Prescription Letter\n4️⃣ Credit Report\n5️⃣ Debt Review Removal\n6️⃣ Judgment Removal\n7️⃣ Car Finance Application\n8️⃣ File Updates 📂\n\n0️⃣ *Back*`;
     try {
         await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body });
     } catch (err) { console.error("Services Menu Error:", err.message); }
@@ -241,9 +231,9 @@ async function saveRequestToDatabase(client, serviceType) {
             serviceType: serviceType,
             details: {
                 creditorName: client.tempRequest?.creditorName || 'N/A',
-                userQuery: client.tempRequest?.userQuery || '',
-                answers: client.tempRequest
+                paymentPreference: client.tempRequest?.paymentPreference || 'N/A',
+                documents: client.documents.slice(-2)
             }
         });
-    } catch (err) { console.error("❌ Database Save Error:", err); }
+    } catch (err) { console.error("❌ DB Save Error:", err); }
 }

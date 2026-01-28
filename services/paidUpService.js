@@ -7,7 +7,7 @@ export const handlePaidUpService = async (client, incomingMsg, mediaUrl, content
       client.sessionState = 'AWAITING_REQ_ID';
       client.tempRequest.lastActivity = new Date();
       return { 
-        text: `Got it: *${incomingMsg}*.\n\nNow, please enter the *ID Number* for this specific request.` 
+        text: `Got it: *${incomingMsg}*.\n\nNow, please enter your *ID Number* for this request.` 
       };
 
     case 'AWAITING_REQ_ID':
@@ -43,7 +43,7 @@ export const handlePaidUpService = async (client, incomingMsg, mediaUrl, content
         { docType: `POR - ${client.tempRequest.creditorName}`, url: porUrl }
       );
 
-      const successMsg = `🎉 *Request Submitted Successfully!* \n\nThank you, ${client.name}. We have received your documents for *${client.tempRequest.creditorName}*. \n\nOur admin team will verify everything and reach out to you soon. Have a great day! 👋`;
+      const successMsg = `🎉 *Request Submitted Successfully!* \n\nThank you, ${client.name}. We have received your documents*. \n\nOur admin team will verify everything and reach out to you soon. Have a great day! 👋`;
       
       client.tempRequest = { creditorName: '', requestIdNumber: '', poaUrl: '', porUrl: '' };
       client.sessionState = 'MAIN_MENU';
