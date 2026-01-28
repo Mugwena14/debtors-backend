@@ -82,14 +82,14 @@ export const handleIncomingMessage = async (req, res) => {
 
                 case '4':
                 case 'SERVICE_CREDIT_REPORT':
-                    // Routing Credit Report to Negotiation Logic
                     client.tempRequest = { serviceType: 'CREDIT_REPORT', creditorName: 'Bureau Report', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_PAYMENT_METHOD';
                     twiml.message(
                         `📊 *Credit Report*\n\n` +
                         `To pull your report, a fee of *R350* is required.\n\n` +
-                        `*Bank Details:*\n` +
-                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *${client.name}*\n\n` +
+                        `*Acc Holder:* MKH Debtors Associates\n` +
+                        `*Branch:* 255355\n` +
+                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *Name & Surname*\n\n` +
                         `*Confirm Payment Plan:*\n1️⃣ Monthly Installments\n2️⃣ Once-off Settlement\n3️⃣ Full Payment`
                     );                
                     return sendTwiML(client);

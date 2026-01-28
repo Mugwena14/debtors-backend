@@ -14,7 +14,6 @@ const ClientSchema = new mongoose.Schema({
     type: String, 
     default: 'AWAITING_ID' 
   },
-  // memory for guided service requests
   tempRequest: {
     creditorName: { type: String, default: '' },
     requestIdNumber: { type: String, default: '' },

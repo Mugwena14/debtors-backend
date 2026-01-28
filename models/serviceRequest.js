@@ -12,9 +12,16 @@ const ServiceRequestSchema = new mongoose.Schema({
     type: String, 
     required: true,
     enum: [
-      'PAID_UP_LETTER', 'PRESCRIPTION', 'CREDIT_REPORT', 
-      'SETTLEMENT', 'DEFAULT_CLEARING', 'ARRANGEMENT', 
-      'JUDGMENT_REMOVAL', 'CAR_APPLICATION'
+      'PAID_UP_LETTER', 
+      'PRESCRIPTION', 
+      'CREDIT_REPORT', 
+      'SETTLEMENT', 
+      'DEFAULT_CLEARING', 
+      'ARRANGEMENT', 
+      'JUDGMENT_REMOVAL', 
+      'CAR_APPLICATION',
+      'DEBT_REVIEW_REMOVAL',
+      'FILE_UPDATE'         
     ]
   },
   status: { 
@@ -25,8 +32,11 @@ const ServiceRequestSchema = new mongoose.Schema({
   
   details: {
     creditorName: String,
+    paymentPreference: String, 
     requestIdNumber: String,
-    mediaUrl: String,           
+    mediaUrl: String,         
+    poaUrl: String,            
+    porUrl: String,          
     answers: mongoose.Schema.Types.Mixed, 
   },
   

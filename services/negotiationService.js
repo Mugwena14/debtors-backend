@@ -3,7 +3,6 @@ import { uploadToCloudinary } from '../utils/cloudinary.js';
 export const handleNegotiationService = async (client, incomingMsg, mediaUrl, contentType, buttonPayload) => {
     const userChoice = (buttonPayload || incomingMsg || '').trim().toUpperCase();
     
-    // Formatting the service name dynamically
     const rawType = client.tempRequest?.serviceType || 'SERVICE';
     const sName = rawType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 
@@ -11,6 +10,9 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, co
         case 'AWAITING_NEGOTIATION_CREDITOR':
             client.tempRequest.creditorName = incomingMsg;
             client.sessionState = 'AWAITING_PAYMENT_METHOD';
+            
+            client.markModified('tempRequest'); 
+            
             return { 
                 text: `Got it: *${incomingMsg}*.\n\nTo proceed with your *${sName}*, please confirm your payment plan:\n\n1️⃣ Monthly Installments\n2️⃣ Once-off Settlement\n3️⃣ Full Payment` 
             };
@@ -18,14 +20,17 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, co
         case 'AWAITING_PAYMENT_METHOD':
             let method = userChoice;
             if (userChoice === '1') method = "Monthly Installments";
-            if (userChoice === '2') method = "Once-off Settlement";
-            if (userChoice === '3') method = "Full Payment";
+            else if (userChoice === '2') method = "Once-off Settlement";
+            else if (userChoice === '3') method = "Full Payment";
 
             client.tempRequest.paymentPreference = method;
             client.sessionState = 'AWAITING_NEG_POA';
             
+            // Explicitly tell Mongoose the object changed
+            client.markModified('tempRequest');
+
             return { 
-                text: `Selected: *${method}*.\n\n📄 One moment while I prepare the *Power of Attorney* for your *${sName}*... I will send it below.`,
+                text: `Selected: *${method}*.\n\n📄 One moment while I prepare the *Power of Attorney* for your *${sName}*...`,
                 action: 'SEND_POA' 
             };
 
@@ -37,6 +42,8 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, co
             const poaUrl = await uploadToCloudinary(mediaUrl, `POA_${rawType}_${client.idNumber}`);
             client.tempRequest.poaUrl = poaUrl;
             client.sessionState = 'AWAITING_NEG_POR';
+            
+            client.markModified('tempRequest');
             
             return { text: `✅ *POA Received.*\n\nNow, please upload your *Proof of Residence* (Document) to finalize the *${sName}* request.` };
 
@@ -52,12 +59,15 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, co
                 { docType: `${sName} POR`, url: porUrl }
             );
 
-            // Summary Message for the User
+            // Fallback check to prevent 'undefined' in the final text
+            const finalPlan = client.tempRequest.paymentPreference || "Contact Agent";
+            const finalCreditor = client.tempRequest.creditorName || "Not Specified";
+
             const successMsg = 
                 `🎉 *${sName} Request Submitted!*\n\n` +
                 `*Details Saved:*\n` +
-                `• Creditor/Ref: ${client.tempRequest.creditorName}\n` +
-                `• Payment Plan: ${client.tempRequest.paymentPreference}\n\n` +
+                `• Creditor/Ref: ${finalCreditor}\n` +
+                `• Payment Plan: ${finalPlan}\n\n` +
                 `*Documents Uploaded:*\n` +
                 `✅ Signed POA\n` +
                 `✅ Proof of Residence\n\n` +
