@@ -17,15 +17,15 @@ const twilioClient = twilio(clientSid, authToken);
 
 export const handleIncomingMessage = async (req, res) => {
     const twiml = new MessagingResponse();
-    const fromNumber = req.body.From; // Already has 'whatsapp:' from Twilio
+    const fromNumber = req.body.From; // The User's WhatsApp number
+    const botNumber = req.body.To;   // IMPORTANT: The Twilio number that received the message
     const mediaUrl = req.body.MediaUrl0;
     const contentType = req.body.MediaContentType0;
     const rawBody = req.body.Body ? req.body.Body.trim() : '';
     const buttonPayload = req.body.ButtonPayload || req.body.ListId || rawBody;
 
-    console.log(`📩 Message from ${fromNumber}: [Body: ${rawBody}] [Payload: ${buttonPayload}]`);
+    console.log(`📩 Message to ${botNumber} from ${fromNumber}: [Body: ${rawBody}]`);
 
-    // Helper to send TwiML and end the request
     const sendTwiML = async (clientInstance) => {
         if (clientInstance) await clientInstance.save();
         return res.type('text/xml').send(twiml.toString());
@@ -45,18 +45,18 @@ export const handleIncomingMessage = async (req, res) => {
         if (rawBody.toLowerCase() === 'hi' || rawBody.toLowerCase() === 'menu') {
             client.sessionState = 'MAIN_MENU';
             await client.save();
-            await sendMainMenuButtons(fromNumber, client.name);
+            await sendMainMenuButtons(fromNumber, client.name, botNumber);
             return sendTwiML(client);
         }
 
         // 3. BUTTON PAYLOAD HANDLER
         switch (buttonPayload) {
             case 'VIEW_SERVICES':
-                await sendServicesMenu(fromNumber);
+                await sendServicesMenu(fromNumber, botNumber);
                 return sendTwiML(client);
 
             case 'MORE_SERVICES':
-                await sendMoreServicesMenu(fromNumber);
+                await sendMoreServicesMenu(fromNumber, botNumber);
                 return sendTwiML(client);
 
             case 'SERVICE_PAID_UP':
@@ -107,7 +107,7 @@ export const handleIncomingMessage = async (req, res) => {
                 client.tempRequest = {};
                 client.sessionState = 'MAIN_MENU';
                 await client.save();
-                await sendMainMenuButtons(fromNumber, client.name);
+                await sendMainMenuButtons(fromNumber, client.name, botNumber);
                 return sendTwiML(client);
         }
 
@@ -120,7 +120,7 @@ export const handleIncomingMessage = async (req, res) => {
                 if (existingId && existingId.phoneNumber === fromNumber) {
                     client.sessionState = 'MAIN_MENU';
                     await client.save();
-                    await sendMainMenuButtons(fromNumber, existingId.name);
+                    await sendMainMenuButtons(fromNumber, existingId.name, botNumber);
                     return sendTwiML(client);
                 }
                 client.idNumber = rawBody;
@@ -138,11 +138,11 @@ export const handleIncomingMessage = async (req, res) => {
                 client.email = rawBody;
                 client.sessionState = 'MAIN_MENU';
                 await client.save();
-                await sendMainMenuButtons(fromNumber, client.name);
+                await sendMainMenuButtons(fromNumber, client.name, botNumber);
                 return sendTwiML(client);
 
             case 'MAIN_MENU':
-                await sendMainMenuButtons(fromNumber, client.name);
+                await sendMainMenuButtons(fromNumber, client.name, botNumber);
                 return sendTwiML(client);
 
             default:
@@ -168,7 +168,7 @@ export const handleIncomingMessage = async (req, res) => {
         if (serviceResponse) {
             if (serviceResponse.action === 'SEND_YES_NO_BUTTONS') {
                 await client.save();
-                await sendYesNoButtons(fromNumber, serviceResponse.text);
+                await sendYesNoButtons(fromNumber, serviceResponse.text, botNumber);
                 return sendTwiML(client);
             }
             if (serviceResponse.action === 'COMPLETE') {
@@ -187,63 +187,45 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// HELPERS (Ensuring 'whatsapp:' prefix is handled)
 
-async function saveRequestToDatabase(client, serviceType) {
-    try {
-        await ServiceRequest.create({
-            clientId: client._id,
-            clientName: client.name,
-            clientPhone: client.phoneNumber,
-            serviceType: serviceType,
-            details: {
-                creditorName: client.tempRequest?.creditorName,
-                requestIdNumber: client.tempRequest?.requestIdNumber,
-                mediaUrl: client.tempRequest?.poaUrl || client.tempRequest?.porUrl || client.tempRequest?.popUrl || client.tempRequest?.mediaUrl,
-                answers: client.tempRequest
-            }
-        });
-    } catch (err) { console.error("❌ Database Save Error:", err); }
-}
-
-async function sendMainMenuButtons(to, name) {
+async function sendMainMenuButtons(to, name, from) {
     try {
         await twilioClient.messages.create({
-            from: process.env.TWILIO_WHATSAPP_NUMBER, // Must be 'whatsapp:+123...'
-            to: to.includes('whatsapp:') ? to : `whatsapp:${to}`,
+            from: from, 
+            to: to,
             contentSid: process.env.TWILIO_MAIN_MENU_SID,
             contentVariables: JSON.stringify({ "1": name })
         });
     } catch (err) { console.error("Menu Error:", err.message); }
 }
 
-async function sendServicesMenu(to) {
+async function sendServicesMenu(to, from) {
     try {
         await twilioClient.messages.create({
-            from: process.env.TWILIO_WHATSAPP_NUMBER,
-            to: to.includes('whatsapp:') ? to : `whatsapp:${to}`,
+            from: from,
+            to: to,
             contentSid: process.env.TWILIO_SERVICES_MENU_SID,
             contentVariables: JSON.stringify({ "1": "Available Services" }),
         });
-    } catch (err) { console.error("❌ Services Menu Rejection:", err.message); }
+    } catch (err) { console.error("❌ Services Menu Error:", err.message); }
 }
 
-async function sendMoreServicesMenu(to) {
+async function sendMoreServicesMenu(to, from) {
     try {
         await twilioClient.messages.create({
-            from: process.env.TWILIO_WHATSAPP_NUMBER,
-            to: to.includes('whatsapp:') ? to : `whatsapp:${to}`,
+            from: from,
+            to: to,
             contentSid: process.env.TWILIO_SERVICES_MENU_2_SID,
             contentVariables: JSON.stringify({ "1": "Specialized Services:" })
         });
     } catch (err) { console.error("More Services Error:", err.message); }
 }
 
-async function sendYesNoButtons(to, bodyText) {
+async function sendYesNoButtons(to, bodyText, from) {
     try {
         await twilioClient.messages.create({
-            from: process.env.TWILIO_WHATSAPP_NUMBER,
-            to: to.includes('whatsapp:') ? to : `whatsapp:${to}`,
+            from: from,
+            to: to,
             body: bodyText,
             contentSid: process.env.TWILIO_YES_NO_SID
         });
