@@ -16,26 +16,29 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, co
             };
 
         case 'AWAITING_PAYMENT_METHOD':
-            // Logic Branch for Credit Report vs Others
             if (rawType === 'CREDIT_REPORT') {
                 if (!mediaUrl) {
-                    return { text: "❌ Please upload your *Proof of Payment* (Image or PDF) to proceed with your Credit Report." };
+                    return { text: "❌ Please upload your *Proof of Payment* (Image or PDF) to proceed." };
                 }
+
                 const popUrl = await uploadToCloudinary(mediaUrl, `POP_${client.idNumber}`);
-                client.tempRequest.popUrl = popUrl; // Store POP
+                client.tempRequest.popUrl = popUrl;
                 client.tempRequest.paymentPreference = "Paid (R350)";
-                client.sessionState = 'AWAITING_NEG_POA';
+                
+                client.documents.push({ docType: 'Credit Report POP', url: popUrl });
                 client.markModified('tempRequest');
+
                 return { 
-                    text: `✅ *Proof of Payment Received.*\n\n📄 One moment while I prepare the *Power of Attorney* for your *${sName}*...`,
-                    action: 'SEND_POA' 
+                    text: `✅ *Proof of Payment Received!*\n\nThank you, your request for a *Credit Report* has been submitted. Our admin team will process it and reach out to you shortly.`,
+                    action: 'COMPLETE' 
                 };
             } else {
-                // Standard Debt/Judgment Payment Plan logic
-                let method = userChoice;
-                if (userChoice === '1') method = "Monthly Installments";
-                else if (userChoice === '2') method = "Once-off Settlement";
-                else if (userChoice === '3') method = "Full Payment";
+                // FIXED: Explicitly map the selection here
+                let method = "Standard";
+                if (userChoice === '1' || userChoice.includes("MONTHLY")) method = "Monthly Installments";
+                else if (userChoice === '2' || userChoice.includes("ONCE")) method = "Once-off Settlement";
+                else if (userChoice === '3' || userChoice.includes("FULL")) method = "Full Payment";
+                else method = incomingMsg; // Fallback to raw text if they typed something else
 
                 client.tempRequest.paymentPreference = method;
                 client.sessionState = 'AWAITING_NEG_POA';
@@ -48,44 +51,34 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, co
             }
 
         case 'AWAITING_NEG_POA':
-            if (!mediaUrl || !contentType?.startsWith('application/')) {
-                return { text: "❌ Please upload the signed POA as a *Document* (PDF or Word file)." };
+            if (!mediaUrl) {
+                return { text: "❌ Please upload the signed POA as a *Document* (PDF or Word)." };
             }
             const poaUrl = await uploadToCloudinary(mediaUrl, `POA_${rawType}_${client.idNumber}`);
             client.tempRequest.poaUrl = poaUrl;
             client.sessionState = 'AWAITING_NEG_POR';
             client.markModified('tempRequest');
-            return { text: `✅ *POA Received.*\n\nNow, please upload your *Proof of Residence* (Document) to finalize the *${sName}* request.` };
+            return { text: `✅ *POA Received.*\n\nNow, please upload your *Proof of Residence* (Document) to finalize the request.` };
 
         case 'AWAITING_NEG_POR':
-            if (!mediaUrl || !contentType?.startsWith('application/')) {
+            if (!mediaUrl) {
                 return { text: "❌ Please upload your *Proof of Residence* as a Document." };
             }
             const porUrl = await uploadToCloudinary(mediaUrl, `POR_${rawType}_${client.idNumber}`);
             
-            // Push to main docs array
+            // Persist to main document history
             client.documents.push(
                 { docType: `${sName} POA`, url: client.tempRequest.poaUrl },
                 { docType: `${sName} POR`, url: porUrl }
             );
 
-            // Clean display variables
-            const finalPlan = client.tempRequest.paymentPreference || "Standard";
-            const planLabel = (rawType === 'CREDIT_REPORT') ? "Payment Status" : "Payment Plan";
+            // FIXED: Pull the preference we saved earlier
+            const finalMethod = client.tempRequest.paymentPreference || "Not Specified";
 
-            const successMsg = 
-                `🎉 *${sName} Request Submitted!*\n\n` +
-                `*Details Saved:*\n` +
-                `• Service: ${sName}\n` +
-                `• Creditor/Ref: ${client.tempRequest.creditorName || 'Internal'}\n` +
-                `• ${planLabel}: ${finalPlan}\n\n` +
-                `*Documents Uploaded:*\n` +
-                `✅ Signed POA\n` +
-                `✅ Proof of Residence\n` +
-                (rawType === 'CREDIT_REPORT' ? `✅ Proof of Payment\n\n` : `\n`) +
-                `Our team at *MKH Debtors* will process your file and update you shortly!`;
-            
-            return { text: successMsg, action: 'COMPLETE' };
+            return { 
+                text: `🎉 *${sName} Request Submitted!*\n\n*Details Saved:*\n• Creditor: ${client.tempRequest.creditorName}\n• Payment Plan: ${finalMethod}\n\nOur team at *MKH Debtors* will process your file and update you shortly!`, 
+                action: 'COMPLETE' 
+            };
 
         default:
             return null;

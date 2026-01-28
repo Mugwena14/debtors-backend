@@ -232,7 +232,7 @@ async function saveRequestToDatabase(client, serviceType) {
                 paymentPreference: client.tempRequest?.paymentPreference || 'N/A',
                 poaUrl: client.tempRequest?.poaUrl,
                 porUrl: client.tempRequest?.porUrl,
-                popUrl: client.tempRequest?.popUrl // Added for Credit Reports
+                popUrl: client.tempRequest?.popUrl
             }
         });
     } catch (err) { console.error("❌ DB Save Error:", err); }
