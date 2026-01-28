@@ -46,7 +46,7 @@ export const handleIncomingMessage = async (req, res) => {
             return sendTwiML(client);
         }
 
-        // 2. HI / RESET / MENU HANDLER (Global Override)
+        // 2. HI / RESET / MENU HANDLER
         if (['hi', 'menu', 'hello', '0'].includes(rawBody.toLowerCase())) {
             client.sessionState = 'MAIN_MENU';
             client.tempRequest = {}; 
@@ -70,27 +70,32 @@ export const handleIncomingMessage = async (req, res) => {
                 case 'SERVICE_PAID_UP':
                     client.tempRequest = { serviceType: 'PAID_UP_LETTER', creditorName: '', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_CREDITOR_NAME';
-                    twiml.message("✅ *Paid Up Letter*\n\nPlease type the *Name of the Creditor*.\n\n_Examples: Capitec, Absa, Sanlam, etc._");
+                    twiml.message("✅ *Paid Up Letter*\n\nPlease type the *Name of the Creditor*.");
                     return sendTwiML(client);
 
                 case '3':
                 case 'SERVICE_PRESCRIPTION':
                     client.tempRequest = { serviceType: 'PRESCRIPTION', creditorName: '', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_PRES_CREDITOR';
-                    twiml.message("📜 *Prescription Letter*\n\nWhat is the *Name of the Creditor*?\n\n_Examples: Capitec, Absa, Sanlam, etc._");
+                    twiml.message("📜 *Prescription Letter*\n\nWhat is the *Name of the Creditor*?");
                     return sendTwiML(client);
 
                 case '4':
                 case 'SERVICE_CREDIT_REPORT':
-                    client.tempRequest = { serviceType: 'CREDIT_REPORT', creditorName: 'Bureau Report', lastActivity: new Date() };
-                    client.sessionState = 'AWAITING_PAYMENT_METHOD';
+                    // UPDATED: Directly ask for POP, skipping the plan buttons
+                    client.tempRequest = { 
+                        serviceType: 'CREDIT_REPORT', 
+                        creditorName: 'Bureau Report', 
+                        lastActivity: new Date() 
+                    };
+                    client.sessionState = 'AWAITING_PAYMENT_METHOD'; 
                     twiml.message(
                         `📊 *Credit Report*\n\n` +
                         `To pull your report, a fee of *R350* is required.\n\n` +
                         `*Acc Holder:* MKH Debtors Associates\n` +
                         `*Branch:* 255355\n` +
-                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *Name & Surname*\n\n` +
-                        `*Confirm Payment Plan:*\n1️⃣ Monthly Installments\n2️⃣ Once-off Settlement\n3️⃣ Full Payment`
+                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *${client.name || 'Your Name'}*\n\n` +
+                        `👉 Please upload your *Proof of Payment* (Image or PDF) to proceed.`
                     );                
                     return sendTwiML(client);
 
@@ -124,7 +129,7 @@ export const handleIncomingMessage = async (req, res) => {
             }
         }
 
-        // 4. SESSION ROUTING (Active Service Handling)
+        // 4. SESSION ROUTING
         let serviceResponse = null;
 
         switch (client.sessionState) {
@@ -148,13 +153,7 @@ export const handleIncomingMessage = async (req, res) => {
                 return sendTwiML(client);
 
             default:
-                // Universal Negotiation/Document Flow states
-                const negotiationStates = [
-                    'AWAITING_NEGOTIATION_CREDITOR', 
-                    'AWAITING_PAYMENT_METHOD', 
-                    'AWAITING_NEG_POA', 
-                    'AWAITING_NEG_POR'
-                ];
+                const negotiationStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
 
                 if (negotiationStates.includes(client.sessionState)) {
                     serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, contentType, buttonPayload);
@@ -207,7 +206,6 @@ export const handleIncomingMessage = async (req, res) => {
 };
 
 // --- HELPERS ---
-
 async function sendMainMenuButtons(to, name) {
     const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n0️⃣ Reset Session`;
     try {
@@ -232,7 +230,9 @@ async function saveRequestToDatabase(client, serviceType) {
             details: {
                 creditorName: client.tempRequest?.creditorName || 'N/A',
                 paymentPreference: client.tempRequest?.paymentPreference || 'N/A',
-                documents: client.documents.slice(-2)
+                poaUrl: client.tempRequest?.poaUrl,
+                porUrl: client.tempRequest?.porUrl,
+                popUrl: client.tempRequest?.popUrl // Added for Credit Reports
             }
         });
     } catch (err) { console.error("❌ DB Save Error:", err); }
