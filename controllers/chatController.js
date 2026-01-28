@@ -15,27 +15,22 @@ const clientSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioClient = twilio(clientSid, authToken);
 
-// Your specific custom number from .env
-const MY_TWILIO_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER; 
+const MY_TWILIO_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER;
 
 export const handleIncomingMessage = async (req, res) => {
     const twiml = new MessagingResponse();
-    const fromNumber = req.body.From; // The User
-    const receivedOn = req.body.To;   // The number that actually received the message
+    const fromNumber = req.body.From;
+    const receivedOn = req.body.To;
     
-    // SAFETY GUARD: If the message arrived on the +1 Sandbox number, 
-    // we ignore it to prevent the mismatch you described.
     if (receivedOn !== MY_TWILIO_NUMBER) {
-        console.log(`⚠️ Ignored message sent to ${receivedOn}. Only accepting messages on ${MY_TWILIO_NUMBER}`);
         return res.status(200).send("Please message the official number.");
     }
 
     const mediaUrl = req.body.MediaUrl0;
     const contentType = req.body.MediaContentType0;
     const rawBody = req.body.Body ? req.body.Body.trim() : '';
+    // This now catches numbers typed by the user
     const buttonPayload = req.body.ButtonPayload || req.body.ListId || rawBody;
-
-    console.log(`✅ Valid message on ${MY_TWILIO_NUMBER} from ${fromNumber}`);
 
     const sendTwiML = async (clientInstance) => {
         if (clientInstance) await clientInstance.save();
@@ -52,62 +47,59 @@ export const handleIncomingMessage = async (req, res) => {
             return sendTwiML(client);
         }
 
-        // 2. HI / RESET HANDLER
-        if (rawBody.toLowerCase() === 'hi' || rawBody.toLowerCase() === 'menu') {
+        // 2. HI / RESET / MENU HANDLER
+        if (['hi', 'menu', 'hello', '0'].includes(rawBody.toLowerCase())) {
             client.sessionState = 'MAIN_MENU';
             await client.save();
             await sendMainMenuButtons(fromNumber, client.name);
             return sendTwiML(client);
         }
 
-        // 3. BUTTON PAYLOAD HANDLER
+        // 3. NUMBER & BUTTON PAYLOAD HANDLER
         switch (buttonPayload) {
+            case '1':
             case 'VIEW_SERVICES':
                 await sendServicesMenu(fromNumber);
                 return sendTwiML(client);
 
-            case 'MORE_SERVICES':
-                await sendMoreServicesMenu(fromNumber);
-                return sendTwiML(client);
-
+            case '2':
             case 'SERVICE_PAID_UP':
                 client.tempRequest = { serviceType: 'PAID_UP_LETTER', creditorName: '', requestIdNumber: '', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_CREDITOR_NAME';
-                twiml.message("✅ *Paid Up Letter Selection*\n\nPlease type the *Name of the Creditor*.");
+                twiml.message("✅ *Paid Up Letter*\n\nPlease type the *Name of the Creditor*.");
                 return sendTwiML(client);
 
+            case '3':
             case 'SERVICE_PRESCRIPTION':
                 client.tempRequest = { serviceType: 'PRESCRIPTION', creditorName: '', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_PRES_CREDITOR';
-                twiml.message("📜 *Prescription Letter Request*\n\nFirst, what is the *Name of the Creditor*?");
+                twiml.message("📜 *Prescription Letter*\n\nWhat is the *Name of the Creditor*?");
                 return sendTwiML(client);
 
+            case '4':
             case 'SERVICE_CREDIT_REPORT':
                 client.tempRequest = { serviceType: 'CREDIT_REPORT', creditorName: 'Credit Report Consultation', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_REPORT_CONSULTATION';
-                const bankDetails = `📊 *Credit Report Consultation*\n\nTo pull your report, a fee of *R350* is required.\n\n*Bank Details:*\nRef: ${client.idNumber || "ID Number"}\n\nOnce paid, please upload your *Proof of Payment* here.`;
-                twiml.message(bankDetails);
+                twiml.message(`📊 *Credit Report*\n\nTo pull your report, a fee of *R350* is required.\n\n*Bank Details:*\nRef: ${client.idNumber}\n\nOnce paid, please upload your *Proof of Payment* here.`);
                 return sendTwiML(client);
 
+            case '5':
             case 'SERVICE_SETTLEMENT':
             case 'SERVICE_DEFAULT':
             case 'SERVICE_ARRANGEMENT':
-                const serviceNames = {
-                    'SERVICE_SETTLEMENT': 'SETTLEMENT',
-                    'SERVICE_DEFAULT': 'DEFAULT_CLEARING',
-                    'SERVICE_ARRANGEMENT': 'ARRANGEMENT'
-                };
-                client.tempRequest = { creditorName: '', serviceType: serviceNames[buttonPayload], lastActivity: new Date() };
+                client.tempRequest = { creditorName: '', serviceType: 'NEGOTIATION', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
                 twiml.message(`🤝 *Negotiation Request*\n\nPlease type the *Name of the Creditor* you want to negotiate with.`);
                 return sendTwiML(client);
 
+            case '6':
             case 'SERVICE_JUDGMENT':
                 await saveRequestToDatabase(client, 'JUDGMENT_REMOVAL');
-                twiml.message(`⚖️ *Judgment Removal*\n\nPlease tap below to call an agent:\n\n📞 *Call:* +27820000000`);
+                twiml.message(`⚖️ *Judgment Removal*\n\nAn agent will contact you shortly, or you can call us:\n\n📞 +27820000000`);
                 client.sessionState = 'MAIN_MENU';
                 return sendTwiML(client);
 
+            case '7':
             case 'SERVICE_CAR_APP':
                 client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_CAR_DOCS';
@@ -127,13 +119,6 @@ export const handleIncomingMessage = async (req, res) => {
 
         switch (client.sessionState) {
             case 'AWAITING_ID':
-                const existingId = await Client.findOne({ idNumber: rawBody });
-                if (existingId && existingId.phoneNumber === fromNumber) {
-                    client.sessionState = 'MAIN_MENU';
-                    await client.save();
-                    await sendMainMenuButtons(fromNumber, existingId.name);
-                    return sendTwiML(client);
-                }
                 client.idNumber = rawBody;
                 client.sessionState = 'ONBOARDING_NAME';
                 twiml.message("ID recorded. What is your *Full Name*?");
@@ -157,6 +142,7 @@ export const handleIncomingMessage = async (req, res) => {
                 return sendTwiML(client);
 
             default:
+                // Route to appropriate service based on state
                 if (client.sessionState === 'AWAITING_REPORT_CONSULTATION') {
                     serviceResponse = await handleCreditReportService(client, rawBody, mediaUrl, contentType);
                 } 
@@ -177,17 +163,14 @@ export const handleIncomingMessage = async (req, res) => {
 
         // 5. FINALIZE SERVICE RESPONSE
         if (serviceResponse) {
-            if (serviceResponse.action === 'SEND_YES_NO_BUTTONS') {
-                await client.save();
-                await sendYesNoButtons(fromNumber, serviceResponse.text);
-                return sendTwiML(client);
-            }
             if (serviceResponse.action === 'COMPLETE') {
                 await saveRequestToDatabase(client, client.tempRequest.serviceType);
                 client.sessionState = 'MAIN_MENU';
                 client.tempRequest = {}; 
+                twiml.message(serviceResponse.text + "\n\nReply *0* to return to the Main Menu.");
+            } else {
+                twiml.message(serviceResponse.text);
             }
-            twiml.message(serviceResponse.text);
         }
 
         return sendTwiML(client);
@@ -198,48 +181,33 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// HELPERS (Strictly using MY_TWILIO_NUMBER)
+// --- UPDATED PLAIN TEXT HELPERS ---
 
 async function sendMainMenuButtons(to, name) {
+    const body = `Hello *${name}*! Welcome to MKH Debtors & Solutions. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n2️⃣ Reset Session\n\n_Type 'Hi' anytime to see this menu._`;
     try {
-        await twilioClient.messages.create({
-            from: MY_TWILIO_NUMBER, 
-            to: to,
-            contentSid: process.env.TWILIO_MAIN_MENU_SID,
-            contentVariables: JSON.stringify({ "1": name })
-        });
+        await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body });
     } catch (err) { console.error("Menu Error:", err.message); }
 }
 
 async function sendServicesMenu(to) {
+    const body = `🛠 *Our Services*\nWhich service do you require?\n\n*Reply with a number:*\n2️⃣ Paid Up Letter\n3️⃣ Prescription Letter\n4️⃣ Credit Report\n5️⃣ Debt Negotiation\n6️⃣ Judgment Removal\n7️⃣ Car Finance Application\n\n0️⃣ *Back to Main Menu*`;
     try {
-        await twilioClient.messages.create({
-            from: MY_TWILIO_NUMBER,
-            to: to,
-            contentSid: process.env.TWILIO_SERVICES_MENU_SID,
-            contentVariables: JSON.stringify({ "1": "Available Services" }),
-        });
-    } catch (err) { console.error("❌ Services Menu Error:", err.message); }
+        await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body });
+    } catch (err) { console.error("Services Menu Error:", err.message); }
 }
 
-async function sendMoreServicesMenu(to) {
+async function saveRequestToDatabase(client, serviceType) {
     try {
-        await twilioClient.messages.create({
-            from: MY_TWILIO_NUMBER,
-            to: to,
-            contentSid: process.env.TWILIO_SERVICES_MENU_2_SID,
-            contentVariables: JSON.stringify({ "1": "Specialized Services:" })
+        await ServiceRequest.create({
+            clientId: client._id,
+            clientName: client.name,
+            clientPhone: client.phoneNumber,
+            serviceType: serviceType,
+            details: {
+                creditorName: client.tempRequest?.creditorName,
+                answers: client.tempRequest
+            }
         });
-    } catch (err) { console.error("More Services Error:", err.message); }
-}
-
-async function sendYesNoButtons(to, bodyText) {
-    try {
-        await twilioClient.messages.create({
-            from: MY_TWILIO_NUMBER,
-            to: to,
-            body: bodyText,
-            contentSid: process.env.TWILIO_YES_NO_SID
-        });
-    } catch (err) { console.error("Yes/No Error:", err.message); }
+    } catch (err) { console.error("❌ Database Save Error:", err); }
 }
