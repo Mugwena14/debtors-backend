@@ -9,6 +9,7 @@ import { handlePrescriptionService } from '../services/prescriptionService.js';
 import { handleCreditReportService } from '../services/creditReportService.js';
 import { handleNegotiationService } from '../services/negotiationService.js';
 import { handleCarAppService } from '../services/carAppService.js';
+import { handleFileUpdateService } from '../services/fileUpdateService.js';
 
 const { MessagingResponse } = twilio.twiml;
 const clientSid = process.env.TWILIO_ACCOUNT_SID;
@@ -29,7 +30,6 @@ export const handleIncomingMessage = async (req, res) => {
     const mediaUrl = req.body.MediaUrl0;
     const contentType = req.body.MediaContentType0;
     const rawBody = req.body.Body ? req.body.Body.trim() : '';
-    // This now catches numbers typed by the user
     const buttonPayload = req.body.ButtonPayload || req.body.ListId || rawBody;
 
     const sendTwiML = async (clientInstance) => {
@@ -80,8 +80,18 @@ export const handleIncomingMessage = async (req, res) => {
             case 'SERVICE_CREDIT_REPORT':
                 client.tempRequest = { serviceType: 'CREDIT_REPORT', creditorName: 'Credit Report Consultation', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_REPORT_CONSULTATION';
-                twiml.message(`📊 *Credit Report*\n\nTo pull your report, a fee of *R350* is required.\n\n*Bank Details:*\nRef: ${client.idNumber}\n\nOnce paid, please upload your *Proof of Payment* here.`);
-                return sendTwiML(client);
+            twiml.message(
+                    `📊 *Credit Report*\n\n` +
+                    `To pull your report, a fee of *R350* is required.\n\n` +
+                    `*Bank Details:*\n` +
+                    `Bank: *First National Bank (FNB)*\n` +
+                    `Account Holder: *MKH Debtors Associates*\n` +
+                    `Account No: *63140304302*\n` +
+                    `Branch: *255355*\n` +
+                    `Ref: *${client.name}*\n\n` +
+                    `Once paid, please upload your *Proof of Payment* here.`
+                );                
+            return sendTwiML(client);
 
             case '5':
             case 'SERVICE_SETTLEMENT':
@@ -104,6 +114,13 @@ export const handleIncomingMessage = async (req, res) => {
                 client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
                 client.sessionState = 'AWAITING_CAR_DOCS';
                 twiml.message("🚗 *Car Finance Application*\n\nPlease upload **ONE PDF** containing your Bank Statements, Payslips, and ID Copy.");
+                return sendTwiML(client);
+
+            case '8':
+            case 'SERVICE_FILE_UPDATE':
+                client.sessionState = 'AWAITING_FILE_UPDATE_INFO';
+                const initialUpdate = await handleFileUpdateService(client, rawBody);
+                twiml.message(initialUpdate.text);
                 return sendTwiML(client);
 
             case 'RESET_REQUEST':
@@ -142,12 +159,14 @@ export const handleIncomingMessage = async (req, res) => {
                 return sendTwiML(client);
 
             default:
-                // Route to appropriate service based on state
                 if (client.sessionState === 'AWAITING_REPORT_CONSULTATION') {
                     serviceResponse = await handleCreditReportService(client, rawBody, mediaUrl, contentType);
                 } 
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
+                }
+                else if (client.sessionState.startsWith('AWAITING_FILE_UPDATE')) {
+                    serviceResponse = await handleFileUpdateService(client, rawBody);
                 }
                 else if (client.sessionState.startsWith('AWAITING_PRES') || client.sessionState.includes('SUMMONS')) {
                     serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
@@ -163,8 +182,24 @@ export const handleIncomingMessage = async (req, res) => {
 
         // 5. FINALIZE SERVICE RESPONSE
         if (serviceResponse) {
+            if (serviceResponse.action === 'SEND_POA') {
+                try {
+                    await twilioClient.messages.create({
+                        from: MY_TWILIO_NUMBER,
+                        to: fromNumber,
+                        body: "📄 Please find the Power of Attorney document attached. Download, sign, and upload it back here.",
+                        mediaUrl: [process.env.POA_TEMPLATE_URL] 
+                    });
+                } catch (err) {
+                    console.error("❌ Failed to send POA PDF:", err.message);
+                }
+            }
+
             if (serviceResponse.action === 'COMPLETE') {
-                await saveRequestToDatabase(client, client.tempRequest.serviceType);
+                // Determine service type for DB save (use query type if File Update)
+                const sType = client.tempRequest.serviceType || 'SERVICE_QUERY';
+                await saveRequestToDatabase(client, sType);
+                
                 client.sessionState = 'MAIN_MENU';
                 client.tempRequest = {}; 
                 twiml.message(serviceResponse.text + "\n\nReply *0* to return to the Main Menu.");
@@ -181,17 +216,17 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// --- UPDATED PLAIN TEXT HELPERS ---
+// --- HELPERS ---
 
 async function sendMainMenuButtons(to, name) {
-    const body = `Hello *${name}*! Welcome to MKH Debtors & Solutions. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n2️⃣ Reset Session\n\n_Type 'Hi' anytime to see this menu._`;
+    const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n2️⃣ Reset Session\n\n_Type 'Hi' anytime to see this menu._`;
     try {
         await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body });
     } catch (err) { console.error("Menu Error:", err.message); }
 }
 
 async function sendServicesMenu(to) {
-    const body = `🛠 *Our Services*\nWhich service do you require?\n\n*Reply with a number:*\n2️⃣ Paid Up Letter\n3️⃣ Prescription Letter\n4️⃣ Credit Report\n5️⃣ Debt Negotiation\n6️⃣ Judgment Removal\n7️⃣ Car Finance Application\n\n0️⃣ *Back to Main Menu*`;
+    const body = `🛠 *Our Services*\nWhich service do you require?\n\n*Reply with a number:*\n2️⃣ Paid Up Letter\n3️⃣ Prescription Letter\n4️⃣ Credit Report\n5️⃣ Debt Review Removal\n6️⃣ Judgment Removal\n7️⃣ Car Finance Application\n8️⃣ File Updates 📂\n\n0️⃣ *Back to Main Menu*`;
     try {
         await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body });
     } catch (err) { console.error("Services Menu Error:", err.message); }
@@ -205,7 +240,8 @@ async function saveRequestToDatabase(client, serviceType) {
             clientPhone: client.phoneNumber,
             serviceType: serviceType,
             details: {
-                creditorName: client.tempRequest?.creditorName,
+                creditorName: client.tempRequest?.creditorName || 'N/A',
+                userQuery: client.tempRequest?.userQuery || '',
                 answers: client.tempRequest
             }
         });
