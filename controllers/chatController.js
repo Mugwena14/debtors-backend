@@ -15,18 +15,27 @@ const clientSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const twilioClient = twilio(clientSid, authToken);
 
-// The sender 
+// Your specific custom number from .env
 const MY_TWILIO_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER; 
 
 export const handleIncomingMessage = async (req, res) => {
     const twiml = new MessagingResponse();
-    const fromNumber = req.body.From; 
+    const fromNumber = req.body.From; // The User
+    const receivedOn = req.body.To;   // The number that actually received the message
+    
+    // SAFETY GUARD: If the message arrived on the +1 Sandbox number, 
+    // we ignore it to prevent the mismatch you described.
+    if (receivedOn !== MY_TWILIO_NUMBER) {
+        console.log(`⚠️ Ignored message sent to ${receivedOn}. Only accepting messages on ${MY_TWILIO_NUMBER}`);
+        return res.status(200).send("Please message the official number.");
+    }
+
     const mediaUrl = req.body.MediaUrl0;
     const contentType = req.body.MediaContentType0;
     const rawBody = req.body.Body ? req.body.Body.trim() : '';
     const buttonPayload = req.body.ButtonPayload || req.body.ListId || rawBody;
 
-    console.log(`📩 Message from ${fromNumber} via ${MY_TWILIO_NUMBER}`);
+    console.log(`✅ Valid message on ${MY_TWILIO_NUMBER} from ${fromNumber}`);
 
     const sendTwiML = async (clientInstance) => {
         if (clientInstance) await clientInstance.save();
@@ -189,7 +198,7 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// HELPERS
+// HELPERS (Strictly using MY_TWILIO_NUMBER)
 
 async function sendMainMenuButtons(to, name) {
     try {
