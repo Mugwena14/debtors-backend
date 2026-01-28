@@ -7,6 +7,7 @@ import ServiceRequest from '../models/serviceRequest.js';
 import { handlePaidUpService } from '../services/paidUpService.js';
 import { handlePrescriptionService } from '../services/prescriptionService.js';
 import { handleNegotiationService } from '../services/negotiationService.js';
+import { handleCreditReportService } from '../services/creditReportService.js'; // NEW
 import { handleCarAppService } from '../services/carAppService.js';
 import { handleFileUpdateService } from '../services/fileUpdateService.js';
 
@@ -82,7 +83,6 @@ export const handleIncomingMessage = async (req, res) => {
 
                 case '4':
                 case 'SERVICE_CREDIT_REPORT':
-                    // UPDATED: Directly ask for POP, skipping the plan buttons
                     client.tempRequest = { 
                         serviceType: 'CREDIT_REPORT', 
                         creditorName: 'Bureau Report', 
@@ -156,7 +156,12 @@ export const handleIncomingMessage = async (req, res) => {
                 const negotiationStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
 
                 if (negotiationStates.includes(client.sessionState)) {
-                    serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, contentType, buttonPayload);
+                    // ROUTING LOGIC: If it's a credit report, use the specialized service
+                    if (client.tempRequest?.serviceType === 'CREDIT_REPORT') {
+                        serviceResponse = await handleCreditReportService(client, mediaUrl);
+                    } else {
+                        serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, buttonPayload);
+                    }
                 } 
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
@@ -232,7 +237,7 @@ async function saveRequestToDatabase(client, serviceType) {
                 paymentPreference: client.tempRequest?.paymentPreference || 'N/A',
                 poaUrl: client.tempRequest?.poaUrl,
                 porUrl: client.tempRequest?.porUrl,
-                popUrl: client.tempRequest?.popUrl
+                popUrl: client.tempRequest?.popUrl 
             }
         });
     } catch (err) { console.error("❌ DB Save Error:", err); }

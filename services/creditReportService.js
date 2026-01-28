@@ -18,7 +18,7 @@ export const handleCreditReportService = async (client, incomingMsg, mediaUrl, c
 
       client.sessionState = 'MAIN_MENU';
       
-      const successMsg = "✅ *Proof of Payment Received!*\n\nThank you, " + client.name + ". Our finance team is verifying the R350 payment. \n\nOnce confirmed, we will pull your credit report and send you a email to begin the analysis. 📊";
+      const successMsg = "✅ *Proof of Payment Received!*\n\nThank you, " + client.name + ". Our team is verifying the R350 payment. \n\nOnce confirmed, we will pull your credit report and send you a email to begin the analysis. 📊";
 
       return { text: successMsg, action: 'COMPLETE' };
 
