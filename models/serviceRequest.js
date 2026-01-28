@@ -44,7 +44,6 @@ const ServiceRequestSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now }
 });
 
-// Ensure the model isn't compiled multiple times in development
 const ServiceRequest = mongoose.models.ServiceRequest || mongoose.model('ServiceRequest', ServiceRequestSchema);
 
 export default ServiceRequest;

@@ -94,7 +94,7 @@ export const handleIncomingMessage = async (req, res) => {
                         `To pull your report, a fee of *R350* is required.\n\n` +
                         `*Acc Holder:* MKH Debtors Associates\n` +
                         `*Branch:* 255355\n` +
-                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *${client.name || 'Your Name'}*\n\n` +
+                        `Bank: *FNB*\nAcc: *63140304302*\nRef: *${client.name}*\n\n` +
                         `👉 Please upload your *Proof of Payment* (Image or PDF) to proceed.`
                     );                
                     return sendTwiML(client);
@@ -156,6 +156,7 @@ export const handleIncomingMessage = async (req, res) => {
                 const negotiationStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
 
                 if (negotiationStates.includes(client.sessionState)) {
+                    // ROUTING LOGIC: Separation check
                     if (client.tempRequest?.serviceType === 'CREDIT_REPORT') {
                         serviceResponse = await handleCreditReportService(client, mediaUrl);
                     } else {
@@ -179,7 +180,10 @@ export const handleIncomingMessage = async (req, res) => {
 
         // 5. FINALIZE SERVICE RESPONSE
         if (serviceResponse) {
-            if (serviceResponse.action === 'SEND_POA') {
+            const isCreditReport = client.tempRequest?.serviceType === 'CREDIT_REPORT';
+
+            // ONLY send POA if it's NOT a credit report
+            if (serviceResponse.action === 'SEND_POA' && !isCreditReport) {
                 try {
                     await twilioClient.messages.create({
                         from: MY_TWILIO_NUMBER,
@@ -191,11 +195,10 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                // FIX: Snapshot the data BEFORE clearing it
                 const sType = client.tempRequest.serviceType || 'SERVICE_QUERY';
+                // Snapshot the data before clearing tempRequest
                 const finalRequestData = { ...client.tempRequest }; 
 
-                // FIX: Pass the snapshot to the database helper
                 await saveRequestToDatabase(client, sType, finalRequestData);
                 
                 client.sessionState = 'MAIN_MENU';
@@ -229,7 +232,6 @@ async function sendServicesMenu(to) {
     } catch (err) { console.error("Services Menu Error:", err.message); }
 }
 
-// FIX: Updated to receive requestData explicitly
 async function saveRequestToDatabase(client, serviceType, requestData) {
     try {
         await ServiceRequest.create({
@@ -242,7 +244,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 paymentPreference: requestData?.paymentPreference || 'N/A',
                 poaUrl: requestData?.poaUrl,
                 porUrl: requestData?.porUrl,
-                popUrl: requestData?.popUrl
+                popUrl: requestData?.popUrl 
             }
         });
         console.log(`✅ ${serviceType} saved for ${client.name}`);
