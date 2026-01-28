@@ -7,7 +7,7 @@ import ServiceRequest from '../models/serviceRequest.js';
 import { handlePaidUpService } from '../services/paidUpService.js';
 import { handlePrescriptionService } from '../services/prescriptionService.js';
 import { handleNegotiationService } from '../services/negotiationService.js';
-import { handleCreditReportService } from '../services/creditReportService.js'; // NEW
+import { handleCreditReportService } from '../services/creditReportService.js';
 import { handleCarAppService } from '../services/carAppService.js';
 import { handleFileUpdateService } from '../services/fileUpdateService.js';
 
@@ -156,7 +156,6 @@ export const handleIncomingMessage = async (req, res) => {
                 const negotiationStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
 
                 if (negotiationStates.includes(client.sessionState)) {
-                    // ROUTING LOGIC: If it's a credit report, use the specialized service
                     if (client.tempRequest?.serviceType === 'CREDIT_REPORT') {
                         serviceResponse = await handleCreditReportService(client, mediaUrl);
                     } else {
@@ -192,8 +191,13 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
+                // FIX: Snapshot the data BEFORE clearing it
                 const sType = client.tempRequest.serviceType || 'SERVICE_QUERY';
-                await saveRequestToDatabase(client, sType);
+                const finalRequestData = { ...client.tempRequest }; 
+
+                // FIX: Pass the snapshot to the database helper
+                await saveRequestToDatabase(client, sType, finalRequestData);
+                
                 client.sessionState = 'MAIN_MENU';
                 client.tempRequest = {}; 
                 twiml.message(serviceResponse.text + "\n\nReply *0* for the Main Menu.");
@@ -225,7 +229,8 @@ async function sendServicesMenu(to) {
     } catch (err) { console.error("Services Menu Error:", err.message); }
 }
 
-async function saveRequestToDatabase(client, serviceType) {
+// FIX: Updated to receive requestData explicitly
+async function saveRequestToDatabase(client, serviceType, requestData) {
     try {
         await ServiceRequest.create({
             clientId: client._id,
@@ -233,12 +238,13 @@ async function saveRequestToDatabase(client, serviceType) {
             clientPhone: client.phoneNumber,
             serviceType: serviceType,
             details: {
-                creditorName: client.tempRequest?.creditorName || 'N/A',
-                paymentPreference: client.tempRequest?.paymentPreference || 'N/A',
-                poaUrl: client.tempRequest?.poaUrl,
-                porUrl: client.tempRequest?.porUrl,
-                popUrl: client.tempRequest?.popUrl 
+                creditorName: requestData?.creditorName || 'N/A',
+                paymentPreference: requestData?.paymentPreference || 'N/A',
+                poaUrl: requestData?.poaUrl,
+                porUrl: requestData?.porUrl,
+                popUrl: requestData?.popUrl
             }
         });
+        console.log(`✅ ${serviceType} saved for ${client.name}`);
     } catch (err) { console.error("❌ DB Save Error:", err); }
 }

@@ -36,13 +36,15 @@ const ServiceRequestSchema = new mongoose.Schema({
     requestIdNumber: String,
     mediaUrl: String,         
     poaUrl: String,            
-    porUrl: String,          
+    porUrl: String,
+    popUrl: String, // Added to support Proof of Payment uploads
     answers: mongoose.Schema.Types.Mixed, 
   },
   
   createdAt: { type: Date, default: Date.now }
 });
 
+// Ensure the model isn't compiled multiple times in development
 const ServiceRequest = mongoose.models.ServiceRequest || mongoose.model('ServiceRequest', ServiceRequestSchema);
 
 export default ServiceRequest;
