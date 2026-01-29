@@ -88,7 +88,8 @@ export const handleIncomingMessage = async (req, res) => {
                         creditorName: 'Bureau Report', 
                         lastActivity: new Date() 
                     };
-                    client.sessionState = 'AWAITING_PAYMENT_METHOD'; 
+                    // UPDATED: Unique state for Credit Report
+                    client.sessionState = 'AWAITING_CREDIT_REPORT_POP'; 
                     twiml.message(
                         `📊 *Credit Report*\n\n` +
                         `To pull your report, a fee of *R350* is required.\n\n` +
@@ -152,16 +153,16 @@ export const handleIncomingMessage = async (req, res) => {
                 await sendMainMenuButtons(fromNumber, client.name);
                 return sendTwiML(client);
 
+            case 'AWAITING_CREDIT_REPORT_POP':
+                serviceResponse = await handleCreditReportService(client, mediaUrl);
+                break;
+
             default:
+                // Negotiation States (Debt Review & Judgment)
                 const negotiationStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
 
                 if (negotiationStates.includes(client.sessionState)) {
-                    // ROUTING LOGIC: Separation check
-                    if (client.tempRequest?.serviceType === 'CREDIT_REPORT') {
-                        serviceResponse = await handleCreditReportService(client, mediaUrl);
-                    } else {
-                        serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, buttonPayload);
-                    }
+                    serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, buttonPayload);
                 } 
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
@@ -180,10 +181,8 @@ export const handleIncomingMessage = async (req, res) => {
 
         // 5. FINALIZE SERVICE RESPONSE
         if (serviceResponse) {
-            const isCreditReport = client.tempRequest?.serviceType === 'CREDIT_REPORT';
-
-            // ONLY send POA if it's NOT a credit report
-            if (serviceResponse.action === 'SEND_POA' && !isCreditReport) {
+            // Updated check: Since Credit Report is standalone, we only trigger POA for other services
+            if (serviceResponse.action === 'SEND_POA') {
                 try {
                     await twilioClient.messages.create({
                         from: MY_TWILIO_NUMBER,
@@ -196,7 +195,6 @@ export const handleIncomingMessage = async (req, res) => {
 
             if (serviceResponse.action === 'COMPLETE') {
                 const sType = client.tempRequest.serviceType || 'SERVICE_QUERY';
-                // Snapshot the data before clearing tempRequest
                 const finalRequestData = { ...client.tempRequest }; 
 
                 await saveRequestToDatabase(client, sType, finalRequestData);
@@ -217,7 +215,7 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// --- HELPERS ---
+// --- HELPERS (Unchanged) ---
 async function sendMainMenuButtons(to, name) {
     const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n0️⃣ Reset Session`;
     try {
