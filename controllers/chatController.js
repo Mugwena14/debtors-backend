@@ -104,7 +104,11 @@ export const handleIncomingMessage = async (req, res) => {
                     twiml.message(
                         `📊 *Credit Report*\n\n` +
                         `To pull your report, a fee of *R350* is required.\n\n` +
-                        `*Acc Holder:* MKH Debtors Associates\nBank: *FNB*\nAcc: *63140304302*\nRef: *${client.name}*\n\n` +
+                        `*Acc Holder:* MKH Debtors Associates\n` +
+                        `Bank: *FNB*\n` +
+                        `Branch: *255355*\n` +
+                        `Acc: *63140304302*\n` +
+                        `Ref: *Your Name & Surname*\n\n` +
                         `👉 Please upload your *Proof of Payment* to proceed.`
                     );                
                     break;
@@ -188,20 +192,24 @@ export const handleIncomingMessage = async (req, res) => {
                 break;
 
             default:
+                // Define state groupings for clean routing
                 const negStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
+                const presStates = ['AWAITING_PRES_CREDITOR', 'AWAITING_LAST_PAYMENT_DATE', 'AWAITING_PAYMENT_ARRANGEMENT', 'AWAITING_ANY_PAYMENTS', 'AWAITING_SUMMONS'];
+
                 if (negStates.includes(client.sessionState)) {
                     serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, buttonPayload);
                 } 
+                else if (presStates.includes(client.sessionState)) {
+                    serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
+                }
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
                 }
                 else if (client.sessionState.startsWith('AWAITING_FILE_UPDATE')) {
                     serviceResponse = await handleFileUpdateService(client, rawBody);
                 }
-                else if (client.sessionState.startsWith('AWAITING_PRES') || client.sessionState.includes('SUMMONS')) {
-                    serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
-                } 
                 else if (client.sessionState !== 'MAIN_MENU') {
+                    // Fallback for Paid Up service and generic states
                     serviceResponse = await handlePaidUpService(client, rawBody, mediaUrl, contentType);
                 }
                 break;
