@@ -56,7 +56,7 @@ export const handlePrescriptionService = async (client, incomingMsg, buttonPaylo
       
       client.markModified('tempRequest');
       return { 
-        text: `Based on your answers, your debt with *${client.tempRequest.creditorName}* appears to have prescribed.`, 
+        text: `Based on your answers, your debt with *${client.tempRequest.creditorName}* appears to have prescribed. Our team will get back to you shortly.`, 
         action: 'COMPLETE' 
       };
 
