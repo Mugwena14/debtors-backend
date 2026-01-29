@@ -27,6 +27,7 @@ const ClientSchema = new mongoose.Schema({
   tempRequest: {
     serviceType: { type: String, default: '' },
     creditorName: { type: String, default: '' },
+    paymentPreference: { type: String, default: '' },
     requestIdNumber: { type: String, default: '' },
     poaUrl: { type: String, default: '' },
     porUrl: { type: String, default: '' },

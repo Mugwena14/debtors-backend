@@ -111,14 +111,14 @@ export const handleIncomingMessage = async (req, res) => {
 
                 case '5':
                 case 'SERVICE_NEGOTIATION':
-                    client.tempRequest = { serviceType: 'DEBT_REVIEW_REMOVAL', creditorName: '', lastActivity: new Date() };
+                    client.tempRequest = { serviceType: 'DEBT_REVIEW_REMOVAL', creditorName: '', paymentPreference: '', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
                     twiml.message(`🤝 *Debt Review Removal*\n\nPlease type the *Name of the Creditor* involved.`);
                     break;
 
                 case '6':
                 case 'SERVICE_JUDGMENT':
-                    client.tempRequest = { serviceType: 'JUDGMENT_REMOVAL', creditorName: '', lastActivity: new Date() };
+                    client.tempRequest = { serviceType: 'JUDGMENT_REMOVAL', creditorName: '', paymentPreference: '', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
                     twiml.message(`⚖️ *Judgment Removal*\n\nPlease type the *Name of the Creditor* associated with this Judgment.`);
                     break;
@@ -221,21 +221,19 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                // Ensure latest changes from NegotiationService are captured
                 client.markModified('tempRequest');
+                await client.save();
                 
                 const snapshotData = JSON.parse(JSON.stringify(client.tempRequest));
                 const confirmedType = snapshotData.serviceType || 'FILE_UPDATE';
                 
                 await saveRequestToDatabase(client, confirmedType, snapshotData);
 
-                // Build Final Summary
                 let summary = `📝 *Request Summary*\n` +
                               `━━━━━━━━━━━━━━\n` +
                               `📍 *Service:* ${confirmedType.replace(/_/g, ' ')}\n` +
                               `🏢 *Creditor:* ${snapshotData.creditorName || 'N/A'}\n`;
                 
-                // Check if a payment preference was captured
                 if (snapshotData.paymentPreference && snapshotData.paymentPreference !== 'N/A') {
                     summary += `💳 *Payment:* ${snapshotData.paymentPreference}\n`;
                 }
@@ -297,7 +295,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 mediaUrl: requestData?.mediaUrl || null
             }
         });
-        console.log(`✅ ${normalizedType} saved. Payment: ${requestData?.paymentPreference}`);
+        console.log(`✅ ${normalizedType} saved correctly.`);
     } catch (err) { 
         console.error("❌ DB Save Error:", err.message); 
     }

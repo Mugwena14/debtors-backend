@@ -5,6 +5,9 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
     const rawType = client.tempRequest?.serviceType || 'SERVICE';
     const sName = rawType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase());
 
+    // Update activity timestamp on every interaction
+    client.tempRequest.lastActivity = new Date();
+
     switch (client.sessionState) {
         case 'AWAITING_NEGOTIATION_CREDITOR':
             client.tempRequest.creditorName = incomingMsg;
@@ -22,7 +25,7 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
             else if (userChoice === '3' || userChoice.includes("FULL")) method = "Full Payment";
             else method = incomingMsg; 
 
-            // Save choice to tempRequest immediately
+            // Persistence: This will now stick because paymentPreference is in your Model
             client.tempRequest.paymentPreference = method;
             client.sessionState = 'AWAITING_NEG_POA';
             client.markModified('tempRequest');
@@ -38,7 +41,6 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
             }
             const poaUrl = await uploadToCloudinary(mediaUrl, `POA_${rawType}_${client.idNumber}`);
             
-            // Save to tempRequest so the DB function sees it
             client.tempRequest.poaUrl = poaUrl;
             client.sessionState = 'AWAITING_NEG_POR';
             client.markModified('tempRequest');
@@ -51,17 +53,16 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
             }
             const porUrl = await uploadToCloudinary(mediaUrl, `POR_${rawType}_${client.idNumber}`);
             
-            // CRUCIAL: Save to tempRequest so it's available for the final database save
+            // Critical Step: Save POR to tempRequest for the final DB snapshot
             client.tempRequest.porUrl = porUrl;
 
+            // Update permanent document store
             client.documents.push(
                 { docType: `${sName} POA`, url: client.tempRequest.poaUrl },
                 { docType: `${sName} POR`, url: porUrl }
             );
 
-            // Fetch the preference one last time for the summary text
             const finalMethod = client.tempRequest.paymentPreference || "Not Specified";
-
             client.markModified('tempRequest');
 
             return { 
