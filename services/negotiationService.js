@@ -22,6 +22,7 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
             else if (userChoice === '3' || userChoice.includes("FULL")) method = "Full Payment";
             else method = incomingMsg; 
 
+            // Save choice to tempRequest immediately
             client.tempRequest.paymentPreference = method;
             client.sessionState = 'AWAITING_NEG_POA';
             client.markModified('tempRequest');
@@ -36,9 +37,12 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
                 return { text: "❌ Please upload the signed POA as a *Document* (PDF or Word)." };
             }
             const poaUrl = await uploadToCloudinary(mediaUrl, `POA_${rawType}_${client.idNumber}`);
+            
+            // Save to tempRequest so the DB function sees it
             client.tempRequest.poaUrl = poaUrl;
             client.sessionState = 'AWAITING_NEG_POR';
             client.markModified('tempRequest');
+            
             return { text: `✅ *POA Received.*\n\nNow, please upload your *Proof of Residence* (Document) to finalize the request.` };
 
         case 'AWAITING_NEG_POR':
@@ -47,12 +51,18 @@ export const handleNegotiationService = async (client, incomingMsg, mediaUrl, bu
             }
             const porUrl = await uploadToCloudinary(mediaUrl, `POR_${rawType}_${client.idNumber}`);
             
+            // CRUCIAL: Save to tempRequest so it's available for the final database save
+            client.tempRequest.porUrl = porUrl;
+
             client.documents.push(
                 { docType: `${sName} POA`, url: client.tempRequest.poaUrl },
                 { docType: `${sName} POR`, url: porUrl }
             );
 
+            // Fetch the preference one last time for the summary text
             const finalMethod = client.tempRequest.paymentPreference || "Not Specified";
+
+            client.markModified('tempRequest');
 
             return { 
                 text: `🎉 *${sName} Request Submitted!*\n\n*Details Saved:*\n• Creditor: ${client.tempRequest.creditorName}\n• Payment Plan: ${finalMethod}\n\nOur team at *MKH Debtors* will process your file and update you shortly!`, 
