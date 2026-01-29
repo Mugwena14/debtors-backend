@@ -88,7 +88,6 @@ export const handleIncomingMessage = async (req, res) => {
                         creditorName: 'Bureau Report', 
                         lastActivity: new Date() 
                     };
-                    // UPDATED: Unique state for Credit Report
                     client.sessionState = 'AWAITING_CREDIT_REPORT_POP'; 
                     twiml.message(
                         `📊 *Credit Report*\n\n` +
@@ -123,6 +122,7 @@ export const handleIncomingMessage = async (req, res) => {
 
                 case '8':
                 case 'SERVICE_FILE_UPDATE':
+                    client.tempRequest = { serviceType: 'FILE_UPDATE', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_FILE_UPDATE_INFO';
                     const initialUpdate = await handleFileUpdateService(client, rawBody);
                     twiml.message(initialUpdate.text);
@@ -158,7 +158,6 @@ export const handleIncomingMessage = async (req, res) => {
                 break;
 
             default:
-                // Negotiation States (Debt Review & Judgment)
                 const negotiationStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
 
                 if (negotiationStates.includes(client.sessionState)) {
@@ -181,7 +180,6 @@ export const handleIncomingMessage = async (req, res) => {
 
         // 5. FINALIZE SERVICE RESPONSE
         if (serviceResponse) {
-            // Updated check: Since Credit Report is standalone, we only trigger POA for other services
             if (serviceResponse.action === 'SEND_POA') {
                 try {
                     await twilioClient.messages.create({
@@ -194,8 +192,9 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                const sType = client.tempRequest.serviceType || 'SERVICE_QUERY';
-                const finalRequestData = { ...client.tempRequest }; 
+                const sType = client.tempRequest.serviceType || 'FILE_UPDATE';
+                // Clone the data to avoid reference issues
+                const finalRequestData = JSON.parse(JSON.stringify(client.tempRequest)); 
 
                 await saveRequestToDatabase(client, sType, finalRequestData);
                 
@@ -215,7 +214,7 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// --- HELPERS (Unchanged) ---
+// --- HELPERS ---
 async function sendMainMenuButtons(to, name) {
     const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n0️⃣ Reset Session`;
     try {
@@ -232,19 +231,37 @@ async function sendServicesMenu(to) {
 
 async function saveRequestToDatabase(client, serviceType, requestData) {
     try {
-        await ServiceRequest.create({
+        // Validation Layer: Ensure serviceType matches the Schema ENUM exactly
+        const validTypes = [
+            'PAID_UP_LETTER', 'PRESCRIPTION', 'CREDIT_REPORT', 
+            'SETTLEMENT', 'DEFAULT_CLEARING', 'ARRANGEMENT', 
+            'JUDGMENT_REMOVAL', 'CAR_APPLICATION', 
+            'DEBT_REVIEW_REMOVAL', 'FILE_UPDATE'
+        ];
+
+        let normalizedType = serviceType;
+        // Mapping common mismatches
+        if (serviceType === 'CAR_FINANCE') normalizedType = 'CAR_APPLICATION';
+        if (!validTypes.includes(normalizedType)) normalizedType = 'FILE_UPDATE';
+
+        const newRequest = await ServiceRequest.create({
             clientId: client._id,
             clientName: client.name,
             clientPhone: client.phoneNumber,
-            serviceType: serviceType,
+            serviceType: normalizedType,
+            status: 'PENDING',
             details: {
                 creditorName: requestData?.creditorName || 'N/A',
                 paymentPreference: requestData?.paymentPreference || 'N/A',
-                poaUrl: requestData?.poaUrl,
-                porUrl: requestData?.porUrl,
-                popUrl: requestData?.popUrl 
+                poaUrl: requestData?.poaUrl || null,
+                porUrl: requestData?.porUrl || null,
+                popUrl: requestData?.popUrl || null,
+                mediaUrl: requestData?.mediaUrl || null
             }
         });
-        console.log(`✅ ${serviceType} saved for ${client.name}`);
-    } catch (err) { console.error("❌ DB Save Error:", err); }
+        console.log(`✅ ${normalizedType} saved for ${client.name} (ID: ${newRequest._id})`);
+        return newRequest;
+    } catch (err) { 
+        console.error("❌ DB Save Error:", err.message); 
+    }
 }

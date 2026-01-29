@@ -1,7 +1,6 @@
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 
 export const handleCreditReportService = async (client, mediaUrl) => {
-    // Note: The controller sends 'AWAITING_PAYMENT_METHOD' for this step
     if (!mediaUrl) {
         return { text: "⚠️ Please upload your *Proof of Payment* as a Document or Image so we can verify your R350 fee." };
     }
@@ -9,10 +8,8 @@ export const handleCreditReportService = async (client, mediaUrl) => {
     try {
         const popUrl = await uploadToCloudinary(mediaUrl, `POP_${client.idNumber}_${Date.now()}`);
         
-        // Save to tempRequest so the controller's snapshot finds it
         client.tempRequest.popUrl = popUrl;
 
-        // Also save to permanent documents
         client.documents.push({
             docType: "Credit Report POP",
             url: popUrl,
