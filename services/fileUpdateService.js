@@ -5,6 +5,7 @@ export const handleFileUpdateService = async (client, incomingMsg) => {
         case 'MAIN_MENU':
         case 'SERVICES_MENU':
         case 'AWAITING_FILE_UPDATE_INFO':
+            // Fetch the 3 most recent active files for this client
             const activeFiles = await ServiceRequest.find({ clientId: client._id })
                 .sort({ createdAt: -1 })
                 .limit(3);
@@ -16,32 +17,22 @@ export const handleFileUpdateService = async (client, incomingMsg) => {
                 };
             }
 
-            let fileList = "📂 *Your Active Files:*\n\n";
+            let fileList = "📂 *Your Active Files Status:*\n\n";
             activeFiles.forEach((file, index) => {
                 const date = new Date(file.createdAt).toLocaleDateString();
                 const type = file.serviceType.replace(/_/g, ' ');
                 fileList += `${index + 1}. *${type}*\n   Status: ${file.status || 'Processing'}\n   Opened: ${date}\n\n`;
             });
 
-            client.sessionState = 'AWAITING_FILE_UPDATE_QUERY';
-            return { 
-                text: `${fileList}Do you have a specific question for the Admin regarding these files? Please type it below.` 
-            };
-
-        case 'AWAITING_FILE_UPDATE_QUERY':
-            client.tempRequest = {
-                serviceType: 'FILE_UPDATE',
-                creditorName: 'Admin Query',
-                userQuery: incomingMsg,
-                lastActivity: new Date()
-            };
+            // Set state back to MAIN_MENU so any reply (like '0') works immediately
+            client.sessionState = 'MAIN_MENU';
             
             return { 
-                text: "✅ Thank you. Your message has been logged. An Admin will review your file and reply to you shortly.",
-                action: 'COMPLETE' 
+                text: `${fileList}------------------------------\n💡 Reply *0* to return to the Main Menu.` 
             };
 
         default:
+            client.sessionState = 'MAIN_MENU';
             return { text: "⚠️ Session timeout or error. Reply *0* to return to the Main Menu." };
     }
 };

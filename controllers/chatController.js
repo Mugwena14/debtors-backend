@@ -34,6 +34,7 @@ export const handleIncomingMessage = async (req, res) => {
 
     const sendTwiML = async (clientInstance) => {
         if (clientInstance) {
+            clientInstance.lastInteraction = new Date(); 
             clientInstance.markModified('tempRequest');
             await clientInstance.save();
         }
@@ -41,7 +42,6 @@ export const handleIncomingMessage = async (req, res) => {
     };
 
     try {
-        // 1. GATEKEEPER CHECK
         let client = await Client.findOne({ phoneNumber: fromNumber });
 
         if (!client) {
@@ -62,7 +62,6 @@ export const handleIncomingMessage = async (req, res) => {
         const onboardingStates = ['AWAITING_ID', 'ONBOARDING_NAME', 'ONBOARDING_EMAIL'];
         const isRegistering = onboardingStates.includes(client.sessionState);
 
-        // 2. HI / RESET / MENU HANDLER
         if (!isRegistering && ['hi', 'menu', 'hello', '0'].includes(rawBody.toLowerCase())) {
             client.sessionState = 'MAIN_MENU';
             client.tempRequest = {}; 
@@ -71,7 +70,6 @@ export const handleIncomingMessage = async (req, res) => {
             return sendTwiML(client);
         }
 
-        // 3. MENU SELECTION LOGIC
         const isInMenuState = ['MAIN_MENU', 'SERVICES_MENU'].includes(client.sessionState);
 
         if (!isRegistering && isInMenuState) {
@@ -121,20 +119,33 @@ export const handleIncomingMessage = async (req, res) => {
                     break;
 
                 case '6':
-                case 'SERVICE_JUDGMENT':
-                    client.tempRequest = { serviceType: 'JUDGMENT_REMOVAL', creditorName: '', paymentPreference: '', lastActivity: new Date() };
+                case 'SERVICE_DEFAULTS':
+                    client.tempRequest = { serviceType: 'DEFAULT_CLEARING', creditorName: '', paymentPreference: '', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
-                    twiml.message(`⚖️ *Judgment Removal*\n\nPlease type the *Name of the Creditor* associated with this Judgment.`);
+                    twiml.message(`📉 *Defaults On Accounts*\n\nPlease type the *Name of the Creditor* you wish to clear defaults for.`);
                     break;
 
                 case '7':
+                case 'SERVICE_JUDGMENT':
+                    // Judgment Removal now immediately assigns an agent
+                    client.tempRequest = { serviceType: 'JUDGMENT_REMOVAL', creditorName: 'Agent Assignment', lastActivity: new Date() };
+                    client.sessionState = 'MAIN_MENU';
+                    await saveRequestToDatabase(client, 'JUDGMENT_REMOVAL', client.tempRequest);
+                    twiml.message(
+                        "⚖️ *Judgment Removal*\n\nWe have received your request. A specialized legal agent has been assigned to your case.\n\n" +
+                        "📞 *Agent Contact:* +27 63 140 3043\n\n" +
+                        "Please save this number. They will contact you shortly to discuss the court process."
+                    );
+                    break;
+
+                case '8':
                 case 'SERVICE_CAR_APP':
                     client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_CAR_DOCS';
                     twiml.message("🚗 *Car Finance Application*\n\nPlease upload **ONE PDF** containing your Bank Statements, Payslips, and ID Copy.");
                     break;
 
-                case '8':
+                case '9':
                 case 'SERVICE_FILE_UPDATE':
                     client.tempRequest = { serviceType: 'FILE_UPDATE', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_FILE_UPDATE_INFO';
@@ -192,7 +203,6 @@ export const handleIncomingMessage = async (req, res) => {
                 break;
 
             default:
-                // Define state groupings for clean routing
                 const negStates = ['AWAITING_NEGOTIATION_CREDITOR', 'AWAITING_PAYMENT_METHOD', 'AWAITING_NEG_POA', 'AWAITING_NEG_POR'];
                 const presStates = ['AWAITING_PRES_CREDITOR', 'AWAITING_LAST_PAYMENT_DATE', 'AWAITING_PAYMENT_ARRANGEMENT', 'AWAITING_ANY_PAYMENTS', 'AWAITING_SUMMONS'];
 
@@ -209,13 +219,11 @@ export const handleIncomingMessage = async (req, res) => {
                     serviceResponse = await handleFileUpdateService(client, rawBody);
                 }
                 else if (client.sessionState !== 'MAIN_MENU') {
-                    // Fallback for Paid Up service and generic states
                     serviceResponse = await handlePaidUpService(client, rawBody, mediaUrl, contentType);
                 }
                 break;
         }
 
-        // 5. FINALIZE SERVICE RESPONSE
         if (serviceResponse) {
             if (serviceResponse.action === 'SEND_POA') {
                 try {
@@ -229,9 +237,6 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                client.markModified('tempRequest');
-                await client.save();
-                
                 const snapshotData = JSON.parse(JSON.stringify(client.tempRequest));
                 const confirmedType = snapshotData.serviceType || 'FILE_UPDATE';
                 
@@ -271,7 +276,7 @@ async function sendMainMenuButtons(to, name) {
 }
 
 async function sendServicesMenu(to) {
-    const body = `🛠 *Our Services*\n\n2️⃣ Paid Up Letter\n3️⃣ Prescription Letter\n4️⃣ Credit Report\n5️⃣ Debt Review Removal\n6️⃣ Judgment Removal\n7️⃣ Car Finance Application\n8️⃣ File Updates 📂\n\n0️⃣ *Back*`;
+    const body = `🛠 *Our Services*\n\n2️⃣ Paid Up Letter ✉️\n3️⃣ Prescription Letter 📜\n4️⃣ Credit Report 📊\n5️⃣ Debt Review Removal 🚫\n6️⃣ Defaults On Accounts 📉\n7️⃣ Judgment Removal ⚖️\n8️⃣ Car Finance Application 🚗\n9️⃣ File Updates 📂\n\n0️⃣ *Back* ⬅️`;
     try { await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body }); } catch (err) { console.error("Services Menu Error:", err.message); }
 }
 
@@ -285,7 +290,6 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
         ];
 
         let normalizedType = serviceType;
-        if (serviceType === 'CAR_APP') normalizedType = 'CAR_APPLICATION';
         if (!validTypes.includes(normalizedType)) normalizedType = 'FILE_UPDATE';
 
         await ServiceRequest.create({
@@ -293,17 +297,15 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
             clientName: client.name,
             clientPhone: client.phoneNumber,
             serviceType: normalizedType,
-            status: 'PENDING',
+            status: normalizedType === 'JUDGMENT_REMOVAL' ? 'AGENT_ASSIGNED' : 'PENDING',
             details: {
                 creditorName: requestData?.creditorName || 'N/A',
                 paymentPreference: requestData?.paymentPreference || 'N/A',
-                poaUrl: requestData?.poaUrl || null,
-                porUrl: requestData?.porUrl || null,
+                userQuery: requestData?.userQuery || null,
                 popUrl: requestData?.popUrl || null,
                 mediaUrl: requestData?.mediaUrl || null
             }
         });
-        console.log(`✅ ${normalizedType} saved correctly.`);
     } catch (err) { 
         console.error("❌ DB Save Error:", err.message); 
     }
