@@ -129,7 +129,6 @@ export const handleIncomingMessage = async (req, res) => {
                 case 'SERVICE_JUDGMENT':
                     client.tempRequest = { serviceType: 'JUDGMENT_REMOVAL', creditorName: 'Agent Assignment', lastActivity: new Date() };
                     client.sessionState = 'MAIN_MENU';
-                    // We await this specifically to ensure the DB write finishes before the response is sent
                     await saveRequestToDatabase(client, 'JUDGMENT_REMOVAL', client.tempRequest);
                     twiml.message(
                         "⚖️ *Judgment Removal*\n\nWe have received your request. A specialized legal agent has been assigned to your case.\n\n" +
@@ -292,7 +291,6 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
         let normalizedType = serviceType;
         if (!validTypes.includes(normalizedType)) normalizedType = 'FILE_UPDATE';
 
-        // ADDED AWAIT HERE - This ensures the creation finishes before the function returns
         await ServiceRequest.create({
             clientId: client._id,
             clientName: client.name,
@@ -302,8 +300,10 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
             details: {
                 creditorName: requestData?.creditorName || 'N/A',
                 paymentPreference: requestData?.paymentPreference || 'N/A',
-                userQuery: requestData?.userQuery || null,
+                requestIdNumber: requestData?.requestIdNumber || client.idNumber,
                 popUrl: requestData?.popUrl || null,
+                poaUrl: requestData?.poaUrl || null,
+                porUrl: requestData?.porUrl || null,
                 mediaUrl: requestData?.mediaUrl || null
             }
         });
