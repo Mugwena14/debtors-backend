@@ -33,22 +33,38 @@ export const handleIncomingMessage = async (req, res) => {
     const buttonPayload = req.body.ButtonPayload || req.body.ListId || rawBody;
 
     const sendTwiML = async (clientInstance) => {
-        if (clientInstance) await clientInstance.save();
+        if (clientInstance) {
+            clientInstance.markModified('tempRequest');
+            await clientInstance.save();
+        }
         return res.type('text/xml').send(twiml.toString());
     };
 
     try {
+        // 1. GATEKEEPER CHECK
         let client = await Client.findOne({ phoneNumber: fromNumber });
 
-        // 1. NEW USER ONBOARDING
         if (!client) {
-            client = await Client.create({ phoneNumber: fromNumber, sessionState: 'AWAITING_ID' });
-            twiml.message("Welcome to *MKH Debtors & Solutions*. 🏢\n\nPlease enter your *ID Number* to access your profile.");
+            client = await Client.create({ 
+                phoneNumber: fromNumber, 
+                sessionState: 'AWAITING_ID',
+                accountStatus: 'Lead' 
+            });
+            twiml.message(
+                "Welcome to *MKH Debtors & Solutions*. 🏢\n\n" +
+                "To access our services, you need to register an account.\n\n" +
+                "⚖️ *Notice:* By proceeding and creating an account, you agree to our Terms and Conditions.\n\n" +
+                "Please enter your *13-digit ID Number* to begin:"
+            );
             return sendTwiML(client);
         }
 
-        // 2. HI / RESET / MENU HANDLER
-        if (['hi', 'menu', 'hello', '0'].includes(rawBody.toLowerCase())) {
+        // Check if user is still in the onboarding loop
+        const onboardingStates = ['AWAITING_ID', 'ONBOARDING_NAME', 'ONBOARDING_EMAIL'];
+        const isRegistering = onboardingStates.includes(client.sessionState);
+
+        // 2. HI / RESET / MENU HANDLER (Blocked for unregistered users)
+        if (!isRegistering && ['hi', 'menu', 'hello', '0'].includes(rawBody.toLowerCase())) {
             client.sessionState = 'MAIN_MENU';
             client.tempRequest = {}; 
             await client.save();
@@ -56,10 +72,10 @@ export const handleIncomingMessage = async (req, res) => {
             return sendTwiML(client);
         }
 
-        // 3. MENU SELECTION LOGIC
+        // 3. MENU SELECTION LOGIC (Blocked for unregistered users)
         const isInMenuState = ['MAIN_MENU', 'SERVICES_MENU'].includes(client.sessionState);
 
-        if (isInMenuState) {
+        if (!isRegistering && isInMenuState) {
             switch (buttonPayload) {
                 case '1':
                 case 'VIEW_SERVICES':
@@ -95,7 +111,7 @@ export const handleIncomingMessage = async (req, res) => {
                         `*Acc Holder:* MKH Debtors Associates\n` +
                         `*Branch:* 255355\n` +
                         `Bank: *FNB*\nAcc: *63140304302*\nRef: *${client.name}*\n\n` +
-                        `👉 Please upload your *Proof of Payment* (Image or PDF) to proceed.`
+                        `👉 Please upload your *Proof of Payment* to proceed.`
                     );                
                     return sendTwiML(client);
 
@@ -135,23 +151,39 @@ export const handleIncomingMessage = async (req, res) => {
 
         switch (client.sessionState) {
             case 'AWAITING_ID':
-                client.idNumber = rawBody;
-                client.sessionState = 'ONBOARDING_NAME';
-                twiml.message("ID recorded. What is your *Full Name*?");
+                if (!/^\d{13}$/.test(rawBody)) {
+                    twiml.message("❌ *Invalid ID Number.*\n\nPlease ensure you enter exactly *13 digits*.");
+                } else {
+                    client.idNumber = rawBody;
+                    client.sessionState = 'ONBOARDING_NAME';
+                    twiml.message("✅ ID recorded. What is your *Full Name and Surname*?");
+                }
                 break;
 
             case 'ONBOARDING_NAME':
-                client.name = rawBody;
-                client.sessionState = 'ONBOARDING_EMAIL';
-                twiml.message(`Thanks, ${rawBody}! What is your *Email Address*?`);
+                if (rawBody.length < 3) {
+                    twiml.message("❌ Please enter your full name.");
+                } else {
+                    client.name = rawBody;
+                    client.sessionState = 'ONBOARDING_EMAIL';
+                    twiml.message(`Thanks, ${rawBody.split(' ')[0]}! What is your *Email Address*?`);
+                }
                 break;
 
             case 'ONBOARDING_EMAIL':
-                client.email = rawBody;
-                client.sessionState = 'MAIN_MENU';
-                await client.save();
-                await sendMainMenuButtons(fromNumber, client.name);
-                return sendTwiML(client);
+                const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+                if (!emailRegex.test(rawBody)) {
+                    twiml.message("❌ *Invalid Email.*\n\nPlease enter a valid email address.");
+                } else {
+                    client.email = rawBody.toLowerCase();
+                    client.sessionState = 'MAIN_MENU';
+                    client.accountStatus = 'Active';
+                    await client.save();
+                    twiml.message("🎉 *Account Created Successfully!*");
+                    await sendMainMenuButtons(fromNumber, client.name);
+                    return sendTwiML(client);
+                }
+                break;
 
             case 'AWAITING_CREDIT_REPORT_POP':
                 serviceResponse = await handleCreditReportService(client, mediaUrl);
@@ -192,11 +224,9 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                const sType = client.tempRequest.serviceType || 'FILE_UPDATE';
-                // Clone the data to avoid reference issues
+                const currentType = client.tempRequest.serviceType || 'FILE_UPDATE';
                 const finalRequestData = JSON.parse(JSON.stringify(client.tempRequest)); 
-
-                await saveRequestToDatabase(client, sType, finalRequestData);
+                await saveRequestToDatabase(client, currentType, finalRequestData);
                 
                 client.sessionState = 'MAIN_MENU';
                 client.tempRequest = {}; 
@@ -214,7 +244,6 @@ export const handleIncomingMessage = async (req, res) => {
     }
 };
 
-// --- HELPERS ---
 async function sendMainMenuButtons(to, name) {
     const body = `Hello *${name}*! Welcome to MKH DEBTORS ASSOCIATES PTY LTD. 🏢\n\nHow can we help you today?\n\n*Reply with a number:*\n1️⃣ View All Services\n0️⃣ Reset Session`;
     try {
@@ -231,7 +260,6 @@ async function sendServicesMenu(to) {
 
 async function saveRequestToDatabase(client, serviceType, requestData) {
     try {
-        // Validation Layer: Ensure serviceType matches the Schema ENUM exactly
         const validTypes = [
             'PAID_UP_LETTER', 'PRESCRIPTION', 'CREDIT_REPORT', 
             'SETTLEMENT', 'DEFAULT_CLEARING', 'ARRANGEMENT', 
@@ -240,11 +268,10 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
         ];
 
         let normalizedType = serviceType;
-        // Mapping common mismatches
-        if (serviceType === 'CAR_FINANCE') normalizedType = 'CAR_APPLICATION';
+        if (serviceType === 'CAR_APP') normalizedType = 'CAR_APPLICATION';
         if (!validTypes.includes(normalizedType)) normalizedType = 'FILE_UPDATE';
 
-        const newRequest = await ServiceRequest.create({
+        await ServiceRequest.create({
             clientId: client._id,
             clientName: client.name,
             clientPhone: client.phoneNumber,
@@ -259,8 +286,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 mediaUrl: requestData?.mediaUrl || null
             }
         });
-        console.log(`✅ ${normalizedType} saved for ${client.name} (ID: ${newRequest._id})`);
-        return newRequest;
+        console.log(`✅ ${normalizedType} saved for ${client.name}`);
     } catch (err) { 
         console.error("❌ DB Save Error:", err.message); 
     }

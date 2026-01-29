@@ -2,7 +2,17 @@ import mongoose from 'mongoose';
 
 const ClientSchema = new mongoose.Schema({
   phoneNumber: { type: String, required: true, unique: true },
-  idNumber: { type: String, unique: true, sparse: true },
+  idNumber: { 
+    type: String, 
+    unique: true, 
+    sparse: true,
+    validate: {
+      validator: function(v) {
+        return /^\d{13}$/.test(v);
+      },
+      message: props => `${props.value} is not a valid 13-digit ID number!`
+    }
+  },
   name: { type: String, default: '' },
   email: { type: String, default: '' },
   accountStatus: { 
@@ -15,10 +25,12 @@ const ClientSchema = new mongoose.Schema({
     default: 'AWAITING_ID' 
   },
   tempRequest: {
+    serviceType: { type: String, default: '' },
     creditorName: { type: String, default: '' },
     requestIdNumber: { type: String, default: '' },
     poaUrl: { type: String, default: '' },
     porUrl: { type: String, default: '' },
+    popUrl: { type: String, default: '' }, 
     lastActivity: { type: Date, default: Date.now }
   },
   documents: [{
@@ -29,5 +41,6 @@ const ClientSchema = new mongoose.Schema({
   outstandingBalance: { type: Number, default: 0 }
 }, { timestamps: true });
 
-const Client = mongoose.model('Client', ClientSchema);
+const Client = mongoose.models.Client || mongoose.model('Client', ClientSchema);
+
 export default Client;
