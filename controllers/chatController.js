@@ -221,19 +221,23 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                // LOCK in the type from tempRequest before we wipe it
                 const confirmedType = client.tempRequest.serviceType || 'FILE_UPDATE';
                 const confirmedData = JSON.parse(JSON.stringify(client.tempRequest));
                 
                 await saveRequestToDatabase(client, confirmedType, confirmedData);
 
-                // Summary for the user
-                const summary = `📝 *Request Summary*\n` +
-                                `━━━━━━━━━━━━━━\n` +
-                                `📍 *Service:* ${confirmedType.replace(/_/g, ' ')}\n` +
-                                `🏢 *Creditor:* ${confirmedData.creditorName || 'N/A'}\n` +
-                                `✅ *Status:* Submitted for Review\n\n` +
-                                serviceResponse.text + `\n\nReply *0* for Main Menu.`;
+                // ENHANCED SUMMARY: Show Payment Preference if it exists
+                let summary = `📝 *Request Summary*\n` +
+                              `━━━━━━━━━━━━━━\n` +
+                              `📍 *Service:* ${confirmedType.replace(/_/g, ' ')}\n` +
+                              `🏢 *Creditor:* ${confirmedData.creditorName || 'N/A'}\n`;
+                
+                if (confirmedData.paymentPreference && confirmedData.paymentPreference !== 'N/A') {
+                    summary += `💳 *Payment:* ${confirmedData.paymentPreference}\n`;
+                }
+
+                summary += `✅ *Status:* Submitted for Review\n\n` +
+                           serviceResponse.text + `\n\nReply *0* for Main Menu.`;
                 
                 client.sessionState = 'MAIN_MENU';
                 client.tempRequest = {}; 
@@ -289,7 +293,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 mediaUrl: requestData?.mediaUrl || null
             }
         });
-        console.log(`✅ ${normalizedType} saved for ${client.name}`);
+        console.log(`✅ ${normalizedType} saved with Payment: ${requestData?.paymentPreference}`);
     } catch (err) { 
         console.error("❌ DB Save Error:", err.message); 
     }
