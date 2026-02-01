@@ -3,10 +3,11 @@ import DocumentRequest from '../models/DocumentRequest.js';
 import Client from '../models/Client.js';
 
 /**
- * REQUEST PAID-UP LETTER
+ * 1. REQUEST DOCUMENT (Supports Paid-Up, Prescription, Debt Review, Defaults)
  */
 export const requestPaidUpLetter = async (req, res) => {
-  const { idNumber, creditorName, creditorEmail } = req.body;
+  // Added requestType to the request body destructuring
+  const { idNumber, creditorName, creditorEmail, requestType = 'Paid-Up' } = req.body;
 
   try {
     const client = await Client.findOne({ idNumber });
@@ -17,17 +18,18 @@ export const requestPaidUpLetter = async (req, res) => {
     const emailData = {
       sender: { name: "MKH Admin", email: process.env.ADMIN_EMAIL },
       to: [{ email: creditorEmail, name: creditorName }],
-      subject: `Official Paid-up Letter Request: ${client.name} (${idNumber})`,
+      subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
       htmlContent: `
         <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;">
           <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors & Solutions</h2>
           <p>Dear <strong>${creditorName}</strong> Team,</p>
-          <p>We are formally requesting a <strong>Paid-up Letter</strong> for the following client:</p>
+          <p>We are formally requesting a <strong>${requestType}</strong> for the following client:</p>
           <div style="background-color: #f4f7f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
             <p style="margin: 5px 0;"><strong>Full Name:</strong> ${client.name}</p>
             <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
+            <p style="margin: 5px 0;"><strong>Inquiry Type:</strong> ${requestType}</p>
           </div>
-          <p>Please review your records and reply to this email (<em>${process.env.ADMIN_EMAIL}</em>) with the requested document attached.</p>
+          <p>Please review your records and reply to this email (<em>${process.env.ADMIN_EMAIL}</em>) with the requested documentation attached.</p>
           <br>
           <p>Regards,</p>
           <p><strong>Admin Department</strong><br/>MKH Debtors & Solutions</p>
@@ -37,17 +39,19 @@ export const requestPaidUpLetter = async (req, res) => {
 
     await apiInstance.sendTransacEmail(emailData);
 
+    // Save the request with the specific requestType
     const newRequest = await DocumentRequest.create({
       client: client._id,
       idNumber: idNumber,
       creditorName: creditorName,
       creditorEmail: creditorEmail,
+      requestType: requestType, // Critical for filtering on your 4 different pages
       status: 'Pending'
     });
 
     res.status(200).json({ 
       success: true, 
-      message: `Request sent to ${creditorName}`, 
+      message: `${requestType} request sent to ${creditorName}`, 
       data: newRequest 
     });
 
@@ -61,7 +65,7 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * UPLOAD RECEIVED DOCUMENT
+ * 2. UPLOAD RECEIVED DOCUMENT
  */
 export const uploadReceivedDocument = async (req, res) => {
   const { requestId } = req.params;
@@ -131,7 +135,7 @@ export const updateDocumentStatus = async (req, res) => {
 };
 
 /**
- * DELETE REQUESTS
+ * 4. DELETE REQUESTS
  */
 export const deleteDocumentRequest = async (req, res) => {
   try {
@@ -154,20 +158,17 @@ export const deleteDocumentRequest = async (req, res) => {
 };
 
 /**
- * GET DASHBOARD STATS
+ * 5. GET DASHBOARD STATS
  */
 export const getDashboardStats = async (req, res) => {
   try {
-    // 1. Count Active Clients/Leads using accountStatus field
     const activeClients = await Client.countDocuments({ 
       accountStatus: { $in: ['Lead', 'Client'] } 
     });
 
-    // 2. Count Document Request Statuses
     const pendingDocs = await DocumentRequest.countDocuments({ status: 'Pending' });
     const completedDocs = await DocumentRequest.countDocuments({ status: 'Received' });
 
-    // 3. Fetch Recent Activity: Get last 5 requests, newest first
     const recentRequests = await DocumentRequest.find()
       .populate('client', 'name')
       .sort({ createdAt: -1 })
@@ -189,15 +190,17 @@ export const getDashboardStats = async (req, res) => {
 };
 
 /**
- * GET ALL REQUESTS
+ * 6. GET ALL REQUESTS
+ * Populates full client object to prevent "client: null" errors on the frontend
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
     const logs = await DocumentRequest.find()
-      .populate('client', 'name phoneNumber')
+      .populate('client') // Populates all client fields (name, phone, etc.)
       .sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: logs });
   } catch (error) {
+    console.error("Fetch Logs Error:", error);
     res.status(500).json({ success: false, message: "Could not fetch logs." });
   }
 };
