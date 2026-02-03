@@ -15,7 +15,7 @@ export const requestPaidUpLetter = async (req, res) => {
       return res.status(404).json({ success: false, message: "Client ID not found in database." });
     }
 
-    // Dynamic messaging based on requestType
+    // Dynamic messaging mapping
     const typeMap = {
       'Paid-Up': "a Paid-up Letter",
       'Prescription': "the removal of Prescribed Debt (Prescription)",
@@ -47,12 +47,12 @@ export const requestPaidUpLetter = async (req, res) => {
       `
     };
 
-    // Send via Brevo
     await apiInstance.sendTransacEmail(emailData);
 
-    // Save to Database
+    // Save to Database with the new clientName field
     const newRequest = await DocumentRequest.create({
       client: client._id,
+      clientName: client.name, // Saved for historical record and performance
       idNumber: idNumber,
       creditorName: creditorName,
       creditorEmail: creditorEmail,
@@ -104,17 +104,16 @@ export const uploadReceivedDocument = async (req, res) => {
 
     res.status(200).json({ 
       success: true, 
-      message: "Document successfully attached to client profile.", 
+      message: "Document successfully attached.", 
       data: updatedRequest 
     });
   } catch (error) {
-    console.error("Upload Error:", error);
-    res.status(500).json({ success: false, message: "Server error during document upload." });
+    res.status(500).json({ success: false, message: "Server error during upload." });
   }
 };
 
 /**
- * 3. UPDATE DOCUMENT STATUS (Manual Toggle)
+ * 3. UPDATE DOCUMENT STATUS
  */
 export const updateDocumentStatus = async (req, res) => {
   const { requestId } = req.params;
@@ -130,18 +129,11 @@ export const updateDocumentStatus = async (req, res) => {
       { new: true }
     );
 
-    if (!updatedRequest) {
-      return res.status(404).json({ success: false, message: "Document request not found." });
-    }
+    if (!updatedRequest) return res.status(404).json({ success: false, message: "Not found." });
 
-    res.status(200).json({ 
-      success: true, 
-      message: `Status updated to ${status}`, 
-      data: updatedRequest 
-    });
+    res.status(200).json({ success: true, data: updatedRequest });
   } catch (error) {
-    console.error("Status Update Error:", error);
-    res.status(500).json({ success: false, message: "Failed to update status." });
+    res.status(500).json({ success: false, message: "Update failed." });
   }
 };
 
@@ -152,9 +144,8 @@ export const deleteDocumentRequest = async (req, res) => {
   try {
     const { requestId } = req.params;
     await DocumentRequest.findByIdAndDelete(requestId);
-    res.status(200).json({ success: true, message: "Request record deleted successfully." });
+    res.status(200).json({ success: true, message: "Deleted successfully." });
   } catch (error) {
-    console.error("Delete Error:", error);
     res.status(500).json({ success: false, message: "Internal server error." });
   }
 };
@@ -164,14 +155,11 @@ export const deleteDocumentRequest = async (req, res) => {
  */
 export const getDashboardStats = async (req, res) => {
   try {
-    const activeClients = await Client.countDocuments({ 
-      accountStatus: { $in: ['Lead', 'Client'] } 
-    });
+    const activeClients = await Client.countDocuments({ accountStatus: { $in: ['Lead', 'Client'] } });
     const pendingDocs = await DocumentRequest.countDocuments({ status: 'Pending' });
     const completedDocs = await DocumentRequest.countDocuments({ status: 'Received' });
 
     const recentRequests = await DocumentRequest.find()
-      .populate('client', 'name')
       .sort({ createdAt: -1 })
       .limit(5);
 
@@ -181,20 +169,30 @@ export const getDashboardStats = async (req, res) => {
       recentRequests
     });
   } catch (error) {
-    console.error("Dashboard Stats Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
 
 /**
  * 6. GET ALL REQUESTS
+ * Updated to handle backward compatibility for records without clientName
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
     const logs = await DocumentRequest.find()
-      .populate('client') 
+      .populate('client', 'name') // Keep populate as a fallback for old records
       .sort({ createdAt: -1 });
-    res.status(200).json({ success: true, data: logs });
+
+    // Ensure every record has a name even if it's an old record
+    const sanitizedLogs = logs.map(log => {
+      const doc = log.toObject();
+      return {
+        ...doc,
+        clientName: doc.clientName || doc.client?.name || "Unknown Client"
+      };
+    });
+
+    res.status(200).json({ success: true, data: sanitizedLogs });
   } catch (error) {
     console.error("Fetch Logs Error:", error);
     res.status(500).json({ success: false, message: "Could not fetch logs." });
