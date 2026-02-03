@@ -6,7 +6,6 @@ import Client from '../models/Client.js';
  * 1. REQUEST DOCUMENT (Supports Paid-Up, Prescription, Debt Review, Defaults)
  */
 export const requestPaidUpLetter = async (req, res) => {
-  // Added requestType to the request body destructuring
   const { idNumber, creditorName, creditorEmail, requestType = 'Paid-Up' } = req.body;
 
   try {
@@ -37,15 +36,16 @@ export const requestPaidUpLetter = async (req, res) => {
       `
     };
 
+    // Send via Brevo
     await apiInstance.sendTransacEmail(emailData);
 
-    // Save the request with the specific requestType
+    // Save to Database
     const newRequest = await DocumentRequest.create({
       client: client._id,
       idNumber: idNumber,
       creditorName: creditorName,
       creditorEmail: creditorEmail,
-      requestType: requestType, // Critical for filtering on your 4 different pages
+      requestType: requestType, 
       status: 'Pending'
     });
 
@@ -56,10 +56,12 @@ export const requestPaidUpLetter = async (req, res) => {
     });
 
   } catch (error) {
-    console.error("Brevo SDK Error:", error.response?.data || error.message);
+    // Enhanced logging for Render troubleshooting
+    console.error("DETAILED ERROR:", error.response?.data || error.message);
     res.status(500).json({ 
       success: false, 
-      message: "Failed to process document request via Brevo SDK." 
+      message: error.message || "Failed to process document request.",
+      details: error.response?.data || "Check server logs for details"
     });
   }
 };
@@ -191,12 +193,11 @@ export const getDashboardStats = async (req, res) => {
 
 /**
  * 6. GET ALL REQUESTS
- * Populates full client object to prevent "client: null" errors on the frontend
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
     const logs = await DocumentRequest.find()
-      .populate('client') // Populates all client fields (name, phone, etc.)
+      .populate('client') 
       .sort({ createdAt: -1 });
     res.status(200).json({ success: true, data: logs });
   } catch (error) {
