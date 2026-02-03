@@ -1,13 +1,15 @@
 import mongoose from 'mongoose';
 
 const documentRequestSchema = new mongoose.Schema({
-  // The reference to the Client model
   client: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Client', 
     required: true 
   },
-  // The specific category of the request
+  clientName: { 
+    type: String, 
+    required: true 
+  },
   requestType: { 
     type: String, 
     enum: ['Paid-Up', 'Prescription', 'Debt Review', 'Defaults'], 
@@ -26,7 +28,7 @@ const documentRequestSchema = new mongoose.Schema({
   dateRequested: { type: Date, default: Date.now },
   dateReceived: { type: Date }
 }, {
-  // Adding timestamps automatically handles 'createdAt' and 'updatedAt'
+  // Handles createdAt and updatedAt automatically
   timestamps: true 
 });
 
