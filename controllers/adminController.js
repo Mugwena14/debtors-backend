@@ -5,13 +5,11 @@ import ServiceRequest from '../models/serviceRequest.js';
 
 /**
  * 1. SEND MANUAL EMAIL REPLY & LOG TO DATABASE
- * Sends email via Brevo and saves the message to the DocumentRequest replies history.
  */
 export const handleAdminReplyEmail = async (req, res) => {
   const { to, subject, message, requestId } = req.body;
 
   try {
-    // 1. Prepare Attachment for Brevo
     const attachments = req.file 
       ? [{
           name: req.file.originalname,
@@ -19,7 +17,6 @@ export const handleAdminReplyEmail = async (req, res) => {
         }]
       : null;
 
-    // 2. Prepare and Send Email
     const emailData = {
       sender: { name: "MKH Debtors Admin", email: process.env.ADMIN_EMAIL },
       to: [{ email: to }],
@@ -39,9 +36,6 @@ export const handleAdminReplyEmail = async (req, res) => {
 
     await apiInstance.sendTransacEmail(emailData);
 
-    // 3. Log to Database
-    // We update the DocumentRequest. If it doesn't exist (e.g., first reply to a WhatsApp request), 
-    // we find the info from the ServiceRequest and create a log.
     const logEntry = {
       subject: subject || "Update regarding your request",
       message: message,
@@ -53,12 +47,11 @@ export const handleAdminReplyEmail = async (req, res) => {
       requestId,
       { 
         $push: { replies: logEntry },
-        $set: { status: 'In Progress' } // Update status when admin replies
+        $set: { status: 'In Progress' } 
       },
       { new: true }
     );
 
-    // Fallback: If requestId wasn't a DocumentRequest ID (maybe it's a new WhatsApp link)
     if (!updatedDoc) {
       const whatsappReq = await ServiceRequest.findById(requestId);
       if (whatsappReq) {
@@ -90,7 +83,7 @@ export const handleAdminReplyEmail = async (req, res) => {
 };
 
 /**
- * 2. UNIVERSAL DOCUMENT REQUEST (Brevo Email + DB Log)
+ * 2. UNIVERSAL DOCUMENT REQUEST
  */
 export const requestPaidUpLetter = async (req, res) => {
   const { idNumber, creditorName, creditorEmail, requestType = 'Paid-Up' } = req.body;
@@ -153,18 +146,23 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * 3. GET WHATSAPP SERVICE REQUESTS
+ * 3. GET WHATSAPP SERVICE REQUESTS (FIXED: Populates Client Email)
  */
 export const getWhatsAppRequests = async (req, res) => {
   try {
-    const requests = await ServiceRequest.find().sort({ createdAt: -1 });
+    // Populate the 'client' reference to get the email address
+    const requests = await ServiceRequest.find()
+      .populate('client', 'email name')
+      .sort({ createdAt: -1 });
 
     const formattedRequests = requests.map(req => {
       const doc = req.toObject();
       return {
         _id: doc._id,
-        clientName: doc.clientName || "New Client",
+        clientName: doc.clientName || doc.client?.name || "New Client",
         clientPhone: doc.clientPhone,
+        // Map the client email so frontend can find it easily
+        clientEmail: doc.client?.email || doc.details?.email || null,
         requestType: doc.serviceType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()),
         status: doc.status || 'PENDING',
         createdAt: doc.createdAt,
@@ -259,10 +257,15 @@ export const getDashboardStats = async (req, res) => {
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
-    const logs = await DocumentRequest.find().populate('client', 'name').sort({ createdAt: -1 });
+    // Populate client email here as well for consistency
+    const logs = await DocumentRequest.find().populate('client', 'name email').sort({ createdAt: -1 });
     const sanitizedLogs = logs.map(log => {
       const doc = log.toObject();
-      return { ...doc, clientName: doc.clientName || doc.client?.name || "Unknown Client" };
+      return { 
+        ...doc, 
+        clientName: doc.clientName || doc.client?.name || "Unknown Client",
+        clientEmail: doc.client?.email || doc.creditorEmail // Fallback to creditor if client email missing in log
+      };
     });
     res.status(200).json({ success: true, data: sanitizedLogs });
   } catch (error) {
