@@ -152,11 +152,12 @@ export const handleIncomingMessage = async (req, res) => {
 
                 case '8':
                 case 'SERVICE_CAR_APP':
-                    client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
+                    client.tempRequest = { serviceType: 'CAR_APPLICATION', mediaUrls: [], lastActivity: new Date() };
                     client.sessionState = 'AWAITING_CAR_DOCS';
                     twiml.message(
                         "🚗 *Car Finance Application*\n\n" +
-                        "Please upload **Photos** of your Bank Statements, Payslips, and ID Copy."
+                        "Please upload **Photos** of your Bank Statements, Payslips, and ID Copy.\n\n" +
+                        "When you are finished uploading all photos, reply *DONE*."
                     );
                     break;
 
@@ -225,10 +226,11 @@ export const handleIncomingMessage = async (req, res) => {
                     serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, buttonPayload);
                 } 
                 else if (presStates.includes(client.sessionState)) {
-                    serviceResponse = await handle幫PrescriptionService(client, rawBody, buttonPayload);
+                    serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
                 }
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
-                    serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
+                    // Update: Passing rawBody to handle "DONE"
+                    serviceResponse = await handleCarAppService(client, mediaUrl, contentType, rawBody);
                 }
                 else if (client.sessionState.startsWith('AWAITING_FILE_UPDATE')) {
                     serviceResponse = await handleFileUpdateService(client, rawBody);
@@ -320,7 +322,9 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 popUrl: requestData?.popUrl || null,
                 poaUrl: requestData?.poaUrl || null,
                 porUrl: requestData?.porUrl || null,
-                mediaUrl: requestData?.mediaUrl || null
+                // Updated to handle both single mediaUrl and array of mediaUrls
+                mediaUrl: requestData?.mediaUrl || null,
+                allPhotos: requestData?.mediaUrls || [] 
             }
         });
         console.log(`✅ Saved ${normalizedType} to database.`);
