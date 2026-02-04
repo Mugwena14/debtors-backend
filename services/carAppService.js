@@ -1,28 +1,51 @@
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 
-export const handleCarAppService = async (client, mediaUrl, contentType) => {
-  if (!mediaUrl || !contentType?.startsWith('application/')) {
-    return { text: "❌ Please upload your application pack as a *Document* (PDF preferred)." };
+export const handleCarAppService = async (client, mediaUrl, contentType, body) => {
+  // 1. Check if user is trying to finish the upload process
+  if (body?.toLowerCase() === 'done' || body === '10') {
+    if (!client.tempRequest.mediaUrls || client.tempRequest.mediaUrls.length === 0) {
+      return { text: "⚠️ You haven't uploaded any documents yet. Please send photos of your Bank Statements, Payslips, and ID." };
+    }
+
+    // Move URLs to the permanent client document store if needed
+    client.tempRequest.mediaUrls.forEach(url => {
+      client.documents.push({
+        docType: 'Car App Photo',
+        url: url,
+        dateUploaded: new Date()
+      });
+    });
+
+    return { 
+      text: `✅ *Application Complete!*\n\nWe have received ${client.tempRequest.mediaUrls.length} documents. Our finance team will review them and contact you shortly.`, 
+      action: 'COMPLETE' 
+    };
+  }
+
+  // 2. Validate Image Upload
+  if (!mediaUrl || !contentType?.startsWith('image/')) {
+    return { text: "❌ Please upload a **Photo** of your document. Once you have uploaded all documents, reply *DONE*." };
   }
 
   try {
-    const docUrl = await uploadToCloudinary(mediaUrl, `CAR_APP_${client.idNumber}_${Date.now()}`);
+    const imgUrl = await uploadToCloudinary(mediaUrl, `CAR_APP_${client.idNumber}_${Date.now()}`);
 
-    client.documents.push({
-      docType: 'Full Car Application Pack',
-      url: docUrl,
-      dateUploaded: new Date()
-    });
+    // Initialize the array in tempRequest if it doesn't exist
+    if (!client.tempRequest.mediaUrls) {
+      client.tempRequest.mediaUrls = [];
+    }
 
-    client.tempRequest = {};
-    client.sessionState = 'MAIN_MENU';
+    // Save the URL to tempRequest
+    client.tempRequest.mediaUrls.push(imgUrl);
+    client.markModified('tempRequest'); 
+
+    const count = client.tempRequest.mediaUrls.length;
 
     return { 
-      text: "✅ *Application Received!*\n\nWe have received your document pack. Our finance team will review your 3 months statements and payslips and contact you shortly regarding your car application.", 
-      action: 'COMPLETE' 
+      text: `📸 *Document Received!* (${count} total)\n\nSend another photo, or if you are finished sending all documents, reply with *DONE*.` 
     };
   } catch (error) {
     console.error("Car App Upload Error:", error);
-    return { text: "⚠️ There was an error uploading your files. Please try again." };
+    return { text: "⚠️ There was an error uploading your photo. Please try again." };
   }
 };
