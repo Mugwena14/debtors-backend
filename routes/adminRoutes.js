@@ -37,7 +37,7 @@ const uploadMemory = multer({
  * @route   POST /api/admin/handle-admin-reply
  * @desc    Send manual email reply to client with optional attachment (Matches Frontend Axios call)
  */
-router.post('/handle-admin-reply', uploadMemory.single('attachment'), handleAdminReplyEmail);
+router.post('/send-client-email', uploadMemory.single('attachment'), handleAdminReplyEmail);
 
 /**
  * @route   POST /api/admin/request-document
