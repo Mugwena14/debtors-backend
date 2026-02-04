@@ -4,14 +4,14 @@ import Client from '../models/Client.js';
 import ServiceRequest from '../models/serviceRequest.js'; 
 
 /**
- * 1. SEND MANUAL EMAIL REPLY TO CLIENT (Brevo + Multer Attachment)
- * Used for custom admin replies from the Dashboard/Requests page
+ * 1. SEND MANUAL EMAIL REPLY & LOG TO DATABASE
+ * Sends email via Brevo and saves the message to the DocumentRequest replies history.
  */
 export const handleAdminReplyEmail = async (req, res) => {
-  const { to, subject, message } = req.body;
+  const { to, subject, message, requestId } = req.body;
 
   try {
-    // Check for attachment from Multer memoryStorage
+    // 1. Prepare Attachment for Brevo
     const attachments = req.file 
       ? [{
           name: req.file.originalname,
@@ -19,6 +19,7 @@ export const handleAdminReplyEmail = async (req, res) => {
         }]
       : null;
 
+    // 2. Prepare and Send Email
     const emailData = {
       sender: { name: "MKH Debtors Admin", email: process.env.ADMIN_EMAIL },
       to: [{ email: to }],
@@ -38,16 +39,51 @@ export const handleAdminReplyEmail = async (req, res) => {
 
     await apiInstance.sendTransacEmail(emailData);
 
+    // 3. Log to Database
+    // We update the DocumentRequest. If it doesn't exist (e.g., first reply to a WhatsApp request), 
+    // we find the info from the ServiceRequest and create a log.
+    const logEntry = {
+      subject: subject || "Update regarding your request",
+      message: message,
+      attachmentUrl: req.file ? req.file.originalname : "No attachment",
+      sentAt: new Date()
+    };
+
+    let updatedDoc = await DocumentRequest.findByIdAndUpdate(
+      requestId,
+      { 
+        $push: { replies: logEntry },
+        $set: { status: 'In Progress' } // Update status when admin replies
+      },
+      { new: true }
+    );
+
+    // Fallback: If requestId wasn't a DocumentRequest ID (maybe it's a new WhatsApp link)
+    if (!updatedDoc) {
+      const whatsappReq = await ServiceRequest.findById(requestId);
+      if (whatsappReq) {
+        updatedDoc = await DocumentRequest.create({
+          clientName: whatsappReq.clientName,
+          requestType: whatsappReq.serviceType,
+          creditorName: whatsappReq.details?.creditorName || "Client Inquiry",
+          creditorEmail: to,
+          status: 'In Progress',
+          replies: [logEntry]
+        });
+      }
+    }
+
     res.status(200).json({ 
       success: true, 
-      message: "Email delivered to client successfully." 
+      message: "Email delivered and saved to history.",
+      data: updatedDoc
     });
 
   } catch (error) {
     console.error("ADMIN EMAIL REPLY ERROR:", error.response?.data || error.message);
     res.status(500).json({ 
       success: false, 
-      message: "Failed to send email.", 
+      message: "Failed to send email or log to database.", 
       details: error.response?.data || error.message 
     });
   }
@@ -112,7 +148,7 @@ export const requestPaidUpLetter = async (req, res) => {
 
   } catch (error) {
     console.error("DETAILED ERROR:", error.response?.data || error.message);
-    res.status(500).json({ success: false, message: "Failed to process document request.", details: error.response?.data || error.message });
+    res.status(500).json({ success: false, message: "Failed to process document request." });
   }
 };
 
@@ -145,7 +181,7 @@ export const getWhatsAppRequests = async (req, res) => {
 };
 
 /**
- * 4. UPLOAD RECEIVED DOCUMENT (Disk Storage)
+ * 4. UPLOAD RECEIVED DOCUMENT
  */
 export const uploadReceivedDocument = async (req, res) => {
   const { requestId } = req.params;
