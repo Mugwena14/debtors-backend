@@ -32,6 +32,19 @@ export const handleIncomingMessage = async (req, res) => {
     const rawBody = req.body.Body ? req.body.Body.trim() : '';
     const buttonPayload = req.body.ButtonPayload || req.body.ListId || rawBody;
 
+    // --- IMAGE ONLY VALIDATION ---
+    if (mediaUrl) {
+        const isImage = contentType && contentType.startsWith('image/');
+        if (!isImage) {
+            twiml.message(
+                "⚠️ *Photos Only Please*\n\n" +
+                "To ensure our team can view your documents immediately, please send them as **Photos/Images** (not PDFs or Documents).\n\n" +
+                "Please take a clear photo of the document and send it again."
+            );
+            return res.type('text/xml').send(twiml.toString());
+        }
+    }
+
     const sendTwiML = async (clientInstance) => {
         if (clientInstance) {
             clientInstance.lastInteraction = new Date(); 
@@ -107,7 +120,7 @@ export const handleIncomingMessage = async (req, res) => {
                         `Branch: *255355*\n` +
                         `Acc: *63140304302*\n` +
                         `Ref: *Your Name & Surname*\n\n` +
-                        `👉 Please upload your *Proof of Payment* to proceed.`
+                        `👉 Please upload your *Proof of Payment (Photo)* to proceed.`
                     );                
                     break;
 
@@ -141,7 +154,10 @@ export const handleIncomingMessage = async (req, res) => {
                 case 'SERVICE_CAR_APP':
                     client.tempRequest = { serviceType: 'CAR_APPLICATION', lastActivity: new Date() };
                     client.sessionState = 'AWAITING_CAR_DOCS';
-                    twiml.message("🚗 *Car Finance Application*\n\nPlease upload **ONE PDF** containing your Bank Statements, Payslips, and ID Copy.");
+                    twiml.message(
+                        "🚗 *Car Finance Application*\n\n" +
+                        "Please upload **Photos** of your Bank Statements, Payslips, and ID Copy."
+                    );
                     break;
 
                 case '9':
@@ -209,7 +225,7 @@ export const handleIncomingMessage = async (req, res) => {
                     serviceResponse = await handleNegotiationService(client, rawBody, mediaUrl, buttonPayload);
                 } 
                 else if (presStates.includes(client.sessionState)) {
-                    serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
+                    serviceResponse = await handle幫PrescriptionService(client, rawBody, buttonPayload);
                 }
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType);
@@ -229,7 +245,7 @@ export const handleIncomingMessage = async (req, res) => {
                     await twilioClient.messages.create({
                         from: MY_TWILIO_NUMBER,
                         to: fromNumber,
-                        body: "📄 Please find the Power of Attorney template below. Download, sign, and upload it back here.",
+                        body: "📄 Please find the Power of Attorney template below. Download, sign, and upload a **Photo** of it back here.",
                         mediaUrl: [process.env.POA_TEMPLATE_URL] 
                     });
                 } catch (err) { console.error("❌ POA Send Error:", err.message); }
