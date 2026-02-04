@@ -1,10 +1,60 @@
 import apiInstance from "../config/brevo.js"; 
 import DocumentRequest from '../models/DocumentRequest.js';
 import Client from '../models/Client.js';
-import ServiceRequest from '../models/serviceRequest.js'; // Import the WhatsApp model
+import ServiceRequest from '../models/serviceRequest.js'; 
 
 /**
- * 1. UNIVERSAL DOCUMENT REQUEST (Brevo Email + DB Log)
+ * 1. SEND MANUAL EMAIL REPLY TO CLIENT (Brevo + Multer Attachment)
+ * Used for custom admin replies from the Dashboard/Requests page
+ */
+export const handleAdminReplyEmail = async (req, res) => {
+  const { to, subject, message } = req.body;
+
+  try {
+    // Check for attachment from Multer memoryStorage
+    const attachments = req.file 
+      ? [{
+          name: req.file.originalname,
+          content: req.file.buffer.toString("base64"),
+        }]
+      : null;
+
+    const emailData = {
+      sender: { name: "MKH Debtors Admin", email: process.env.ADMIN_EMAIL },
+      to: [{ email: to }],
+      subject: subject || "Update regarding your request",
+      htmlContent: `
+        <div style="font-family: Arial, sans-serif; line-height:1.6; max-width:600px; border: 1px solid #eee; padding:20px; color:#111; background-color: #ffffff;">
+          <h2 style="color:#0033A1; border-bottom: 2px solid #00B4D8; padding-bottom:10px;">Official Correspondence</h2>
+          <p style="white-space: pre-line; font-size: 15px;">${message}</p>
+          <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; font-size: 12px; color: #777;">
+            <p>This is an automated delivery from the MKH Web Portal on behalf of the Admin team.</p>
+            <p><strong>MKH Debtors & Solutions</strong></p>
+          </div>
+        </div>
+      `,
+      attachment: attachments,
+    };
+
+    await apiInstance.sendTransacEmail(emailData);
+
+    res.status(200).json({ 
+      success: true, 
+      message: "Email delivered to client successfully." 
+    });
+
+  } catch (error) {
+    console.error("ADMIN EMAIL REPLY ERROR:", error.response?.data || error.message);
+    res.status(500).json({ 
+      success: false, 
+      message: "Failed to send email.", 
+      details: error.response?.data || error.message 
+    });
+  }
+};
+
+/**
+ * 2. UNIVERSAL DOCUMENT REQUEST (Brevo Email + DB Log)
  */
 export const requestPaidUpLetter = async (req, res) => {
   const { idNumber, creditorName, creditorEmail, requestType = 'Paid-Up' } = req.body;
@@ -67,7 +117,7 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * 2. GET WHATSAPP SERVICE REQUESTS (For the new Requests Page)
+ * 3. GET WHATSAPP SERVICE REQUESTS
  */
 export const getWhatsAppRequests = async (req, res) => {
   try {
@@ -79,12 +129,11 @@ export const getWhatsAppRequests = async (req, res) => {
         _id: doc._id,
         clientName: doc.clientName || "New Client",
         clientPhone: doc.clientPhone,
-        // Convert "CREDIT_REPORT" to "Credit Report" for cleaner UI
         requestType: doc.serviceType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()),
         status: doc.status || 'PENDING',
         createdAt: doc.createdAt,
         creditorName: doc.details?.creditorName || "Bureau Report",
-        details: doc.details // Pass all data for the "View" modal
+        details: doc.details 
       };
     });
 
@@ -96,7 +145,7 @@ export const getWhatsAppRequests = async (req, res) => {
 };
 
 /**
- * 3. UPLOAD RECEIVED DOCUMENT
+ * 4. UPLOAD RECEIVED DOCUMENT (Disk Storage)
  */
 export const uploadReceivedDocument = async (req, res) => {
   const { requestId } = req.params;
@@ -118,7 +167,7 @@ export const uploadReceivedDocument = async (req, res) => {
 };
 
 /**
- * 4. UPDATE DOCUMENT STATUS
+ * 5. UPDATE DOCUMENT STATUS
  */
 export const updateDocumentStatus = async (req, res) => {
   const { requestId } = req.params;
@@ -138,14 +187,13 @@ export const updateDocumentStatus = async (req, res) => {
 };
 
 /**
- * 5. DELETE REQUESTS (General)
+ * 6. DELETE REQUESTS
  */
 export const deleteDocumentRequest = async (req, res) => {
   try {
     const { requestId } = req.params;
-    // Check both collections to ensure we delete the right one
-    const deletedDoc = await DocumentRequest.findByIdAndDelete(requestId);
-    const deletedService = await ServiceRequest.findByIdAndDelete(requestId);
+    await DocumentRequest.findByIdAndDelete(requestId);
+    await ServiceRequest.findByIdAndDelete(requestId);
     
     res.status(200).json({ success: true, message: "Deleted successfully." });
   } catch (error) {
@@ -154,7 +202,7 @@ export const deleteDocumentRequest = async (req, res) => {
 };
 
 /**
- * 6. GET DASHBOARD STATS
+ * 7. GET DASHBOARD STATS
  */
 export const getDashboardStats = async (req, res) => {
   try {
@@ -171,7 +219,7 @@ export const getDashboardStats = async (req, res) => {
 };
 
 /**
- * 7. GET ALL LOGS (Manual Document Requests Only)
+ * 8. GET ALL LOGS (Manual Only)
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
