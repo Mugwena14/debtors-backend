@@ -18,6 +18,12 @@ const twilioClient = twilio(clientSid, authToken);
 
 const MY_TWILIO_NUMBER = process.env.TWILIO_WHATSAPP_NUMBER;
 
+// Helper to modify Cloudinary URLs for direct download
+const forceDownload = (url) => {
+    if (!url || typeof url !== 'string' || !url.includes('cloudinary')) return url;
+    return url.replace('/upload/', '/upload/fl_attachment/');
+};
+
 export const handleIncomingMessage = async (req, res) => {
     const twiml = new MessagingResponse();
     const fromNumber = req.body.From;
@@ -229,7 +235,6 @@ export const handleIncomingMessage = async (req, res) => {
                     serviceResponse = await handlePrescriptionService(client, rawBody, buttonPayload);
                 }
                 else if (client.sessionState === 'AWAITING_CAR_DOCS') {
-                    // Update: Passing rawBody to handle "DONE"
                     serviceResponse = await handleCarAppService(client, mediaUrl, contentType, rawBody);
                 }
                 else if (client.sessionState.startsWith('AWAITING_FILE_UPDATE')) {
@@ -319,15 +324,15 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 creditorName: requestData?.creditorName || 'N/A',
                 paymentPreference: requestData?.paymentPreference || 'N/A',
                 requestIdNumber: requestData?.requestIdNumber || client.idNumber,
-                popUrl: requestData?.popUrl || null,
-                poaUrl: requestData?.poaUrl || null,
-                porUrl: requestData?.porUrl || null,
-                // Updated to handle both single mediaUrl and array of mediaUrls
-                mediaUrl: requestData?.mediaUrl || null,
-                allPhotos: requestData?.mediaUrls || [] 
+                // Wrapping URLs with forceDownload
+                popUrl: forceDownload(requestData?.popUrl),
+                poaUrl: forceDownload(requestData?.poaUrl),
+                porUrl: forceDownload(requestData?.porUrl),
+                mediaUrl: forceDownload(requestData?.mediaUrl),
+                allPhotos: (requestData?.mediaUrls || []).map(url => forceDownload(url))
             }
         });
-        console.log(`✅ Saved ${normalizedType} to database.`);
+        console.log(`✅ Saved ${normalizedType} to database with download links.`);
     } catch (err) { 
         console.error("❌ DB Save Error:", err.message); 
     }
