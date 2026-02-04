@@ -56,6 +56,7 @@ export const handleAdminReplyEmail = async (req, res) => {
       const whatsappReq = await ServiceRequest.findById(requestId);
       if (whatsappReq) {
         updatedDoc = await DocumentRequest.create({
+          client: whatsappReq.clientId, // Corrected to clientId
           clientName: whatsappReq.clientName,
           requestType: whatsappReq.serviceType,
           creditorName: whatsappReq.details?.creditorName || "Client Inquiry",
@@ -146,24 +147,27 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * 3. GET WHATSAPP SERVICE REQUESTS (FIXED: Populates Client Email)
+ * 3. GET WHATSAPP SERVICE REQUESTS (FIXED: Path matches clientId)
  */
 export const getWhatsAppRequests = async (req, res) => {
   try {
-    // Populate the 'client' reference to get the email address
     const requests = await ServiceRequest.find()
-      .populate('client', 'email name')
-      .sort({ createdAt: -1 });
+      .populate({
+        path: 'clientId', // Matches your ServiceRequest model field
+        model: 'Client',
+        select: 'email name',
+        options: { strictPopulate: false }
+      })
+      .sort({ createdAt: -1 })
+      .lean();
 
-    const formattedRequests = requests.map(req => {
-      const doc = req.toObject();
+    const formattedRequests = requests.map(doc => {
       return {
         _id: doc._id,
-        clientName: doc.clientName || doc.client?.name || "New Client",
+        clientName: doc.clientName || doc.clientId?.name || "New Client",
         clientPhone: doc.clientPhone,
-        // Map the client email so frontend can find it easily
-        clientEmail: doc.client?.email || doc.details?.email || null,
-        requestType: doc.serviceType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()),
+        clientEmail: doc.clientId?.email || doc.details?.email || null,
+        requestType: doc.serviceType ? doc.serviceType.replace(/_/g, ' ').toLowerCase().replace(/\b\w/g, l => l.toUpperCase()) : "General Inquiry",
         status: doc.status || 'PENDING',
         createdAt: doc.createdAt,
         creditorName: doc.details?.creditorName || "Bureau Report",
@@ -257,18 +261,27 @@ export const getDashboardStats = async (req, res) => {
  */
 export const getAllDocumentRequests = async (req, res) => {
   try {
-    // Populate client email here as well for consistency
-    const logs = await DocumentRequest.find().populate('client', 'name email').sort({ createdAt: -1 });
-    const sanitizedLogs = logs.map(log => {
-      const doc = log.toObject();
+    const logs = await DocumentRequest.find()
+      .populate({
+        path: 'client',
+        model: 'Client',
+        select: 'name email',
+        options: { strictPopulate: false }
+      })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const sanitizedLogs = logs.map(doc => {
       return { 
         ...doc, 
         clientName: doc.clientName || doc.client?.name || "Unknown Client",
-        clientEmail: doc.client?.email || doc.creditorEmail // Fallback to creditor if client email missing in log
+        clientEmail: doc.client?.email || doc.clientEmail || doc.creditorEmail
       };
     });
+
     res.status(200).json({ success: true, data: sanitizedLogs });
   } catch (error) {
+    console.error("Log Fetch Error:", error);
     res.status(500).json({ success: false, message: "Could not fetch logs." });
   }
 };
