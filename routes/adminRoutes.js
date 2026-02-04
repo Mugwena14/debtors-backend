@@ -8,7 +8,7 @@ import {
   updateDocumentStatus,
   deleteDocumentRequest,
   getDashboardStats,
-  handleAdminReplyEmail // New controller import
+  handleAdminReplyEmail 
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -34,10 +34,10 @@ const uploadMemory = multer({
 // --- API ENDPOINTS (FOR REACT FRONTEND) ---
 
 /**
- * @route   POST /api/admin/send-client-email
- * @desc    Send manual email reply to client with optional attachment via Brevo
+ * @route   POST /api/admin/handle-admin-reply
+ * @desc    Send manual email reply to client with optional attachment (Matches Frontend Axios call)
  */
-router.post('/send-client-email', uploadMemory.single('attachment'), handleAdminReplyEmail);
+router.post('/handle-admin-reply', uploadMemory.single('attachment'), handleAdminReplyEmail);
 
 /**
  * @route   POST /api/admin/request-document
