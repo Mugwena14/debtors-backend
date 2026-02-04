@@ -7,13 +7,14 @@ import {
   getWhatsAppRequests,
   updateDocumentStatus,
   deleteDocumentRequest,
-  getDashboardStats
+  getDashboardStats,
+  handleAdminReplyEmail // New controller import
 } from '../controllers/adminController.js';
 
 const router = express.Router();
 
-// Configure Multer for PDF uploads
-const storage = multer.diskStorage({
+// 1. DISK STORAGE: For permanent document uploads (PDFs from creditors)
+const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/docs/');
   },
@@ -21,9 +22,22 @@ const storage = multer.diskStorage({
     cb(null, `${Date.now()}-${file.originalname}`);
   }
 });
-const upload = multer({ storage });
+const uploadDisk = multer({ storage: diskStorage });
+
+// 2. MEMORY STORAGE: For temporary email attachments sent via Brevo
+const memoryStorage = multer.memoryStorage();
+const uploadMemory = multer({ 
+  storage: memoryStorage,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit for emails
+});
 
 // --- API ENDPOINTS (FOR REACT FRONTEND) ---
+
+/**
+ * @route   POST /api/admin/send-client-email
+ * @desc    Send manual email reply to client with optional attachment via Brevo
+ */
+router.post('/send-client-email', uploadMemory.single('attachment'), handleAdminReplyEmail);
 
 /**
  * @route   POST /api/admin/request-document
@@ -47,7 +61,7 @@ router.get('/whatsapp-requests', getWhatsAppRequests);
  * @route   PUT /api/admin/upload-document/:requestId
  * @desc    Upload the reply document received from a creditor
  */
-router.put('/upload-document/:requestId', upload.single('paidUpLetter'), uploadReceivedDocument);
+router.put('/upload-document/:requestId', uploadDisk.single('paidUpLetter'), uploadReceivedDocument);
 
 /**
  * @route   PUT /api/admin/update-status/:requestId
