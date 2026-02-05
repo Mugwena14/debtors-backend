@@ -56,7 +56,7 @@ export const handleAdminReplyEmail = async (req, res) => {
       const whatsappReq = await ServiceRequest.findById(requestId);
       if (whatsappReq) {
         updatedDoc = await DocumentRequest.create({
-          client: whatsappReq.clientId, // Corrected to clientId
+          client: whatsappReq.clientId,
           clientName: whatsappReq.clientName,
           requestType: whatsappReq.serviceType,
           creditorName: whatsappReq.details?.creditorName || "Client Inquiry",
@@ -147,13 +147,13 @@ export const requestPaidUpLetter = async (req, res) => {
 };
 
 /**
- * 3. GET WHATSAPP SERVICE REQUESTS (FIXED: Path matches clientId)
+ * 3. GET WHATSAPP SERVICE REQUESTS
  */
 export const getWhatsAppRequests = async (req, res) => {
   try {
     const requests = await ServiceRequest.find()
       .populate({
-        path: 'clientId', // Matches your ServiceRequest model field
+        path: 'clientId',
         model: 'Client',
         select: 'email name',
         options: { strictPopulate: false }
@@ -205,33 +205,55 @@ export const uploadReceivedDocument = async (req, res) => {
 };
 
 /**
- * 5. UPDATE DOCUMENT STATUS
+ * 5. UPDATE DOCUMENT STATUS (SMART VERSION)
+ * Checks both DocumentRequest and ServiceRequest models
  */
 export const updateDocumentStatus = async (req, res) => {
   const { requestId } = req.params;
   const { status } = req.body;
 
   try {
-    const updatedRequest = await DocumentRequest.findByIdAndUpdate(
+    // Attempt to update manual DocumentRequest
+    let updatedRequest = await DocumentRequest.findByIdAndUpdate(
       requestId,
-      { status, dateReceived: status === 'Received' ? new Date() : null },
+      { status, dateReceived: (status === 'Received' || status === 'COMPLETED') ? new Date() : null },
       { new: true }
     );
-    if (!updatedRequest) return res.status(404).json({ success: false, message: "Not found." });
+
+    // If not found, attempt to update WhatsApp ServiceRequest
+    if (!updatedRequest) {
+      updatedRequest = await ServiceRequest.findByIdAndUpdate(
+        requestId,
+        { status },
+        { new: true }
+      );
+    }
+
+    if (!updatedRequest) {
+      return res.status(404).json({ success: false, message: "Request ID not found in any collection." });
+    }
+
     res.status(200).json({ success: true, data: updatedRequest });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Update failed." });
+    console.error("STATUS UPDATE ERROR:", error);
+    res.status(500).json({ success: false, message: "Update failed.", error: error.message });
   }
 };
 
 /**
- * 6. DELETE REQUESTS
+ * 6. DELETE REQUESTS (SMART VERSION)
  */
 export const deleteDocumentRequest = async (req, res) => {
   try {
     const { requestId } = req.params;
-    await DocumentRequest.findByIdAndDelete(requestId);
-    await ServiceRequest.findByIdAndDelete(requestId);
+    
+    // Attempt deletion from both to ensure it's gone
+    const docDel = await DocumentRequest.findByIdAndDelete(requestId);
+    const servDel = await ServiceRequest.findByIdAndDelete(requestId);
+    
+    if (!docDel && !servDel) {
+        return res.status(404).json({ success: false, message: "Record already deleted or not found." });
+    }
     
     res.status(200).json({ success: true, message: "Deleted successfully." });
   } catch (error) {
