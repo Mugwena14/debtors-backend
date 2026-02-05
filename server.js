@@ -19,7 +19,6 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- DATABASE CONNECTION ---
-// We use a check to prevent the "undefined" string error
 const mongoURI = process.env.MONGODB_URI;
 
 if (!mongoURI) {
@@ -30,7 +29,7 @@ if (!mongoURI) {
       .catch(err => console.error('❌ MongoDB Connection Error:', err));
 }
 
-// CORS CONFIGURATION
+// --- CORS CONFIGURATION ---
 const allowedOrigins = [
   'http://localhost:5173',
   'https://mkhdebtors.co.za',
@@ -39,6 +38,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
+    // allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
     
     if (allowedOrigins.indexOf(origin) === -1) {
@@ -47,7 +47,8 @@ app.use(cors({
     }
     return callback(null, true);
   },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  // ADDED 'PATCH' HERE TO RESOLVE YOUR ERROR
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
