@@ -1,26 +1,26 @@
 import mongoose from 'mongoose';
 
 const documentRequestSchema = new mongoose.Schema({
-  // The ObjectId link to the Client model
   client: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'Client', 
     required: true 
   },
-  
-  // Basic Client Info (Mirrored for easy access and safety)
   clientName: { type: String, required: true },
-  clientPhone: { type: String }, // Added to prevent lookup errors
-  clientEmail: { type: String }, // Added for the email logic we built
+  clientPhone: { type: String },
+  clientEmail: { type: String }, 
 
   // Request Details
   requestType: { 
     type: String, 
     required: true,
-    enum: ['Credit Report', 'Paid Up', 'Prescription', 'Debt Review', 'Defaults', 'Car Application', 'Judgment Removal'] 
+    // UPDATED: Added 'Paid-Up' with hyphen to match frontend logic
+    enum: ['Credit Report', 'Paid Up', 'Paid-Up', 'Prescription', 'Debt Review', 'Defaults', 'Car Application', 'Judgment Removal'] 
   },
   idNumber: { type: String },
   creditorName: { type: String },
+  // creditorEmail remains a String. 
+  // Our controller will save the joined list: "email1, email2, email3"
   creditorEmail: { type: String },
   status: { 
     type: String, 
@@ -29,7 +29,6 @@ const documentRequestSchema = new mongoose.Schema({
   },
   documentUrl: { type: String },
 
-  // NEW: Communication Log for Admin Replies
   replies: [{
     subject: String,
     message: String,
@@ -41,9 +40,7 @@ const documentRequestSchema = new mongoose.Schema({
   dateReceived: { type: Date }
 }, { 
   timestamps: true,
-  // This helps prevent the StrictPopulateError if you query dynamically
   strictPopulate: false 
 });
 
-// Ensure the model name matches exactly what you use in .populate('client')
 export default mongoose.models.DocumentRequest || mongoose.model('DocumentRequest', documentRequestSchema);
