@@ -86,8 +86,12 @@ export const handleAdminReplyEmail = async (req, res) => {
 /**
  * 2. UNIVERSAL DOCUMENT REQUEST
  */
+/**
+ * 2. UNIVERSAL DOCUMENT REQUEST
+ * Sends individual private emails to each recipient and logs to DB
+ */
 export const requestPaidUpLetter = async (req, res) => {
-  const { idNumber, creditorName, creditorEmail, requestType = 'Paid-Up' } = req.body;
+  const { idNumber, creditorName, creditorEmails, requestType = 'Paid-Up' } = req.body;
 
   try {
     const client = await Client.findOne({ idNumber });
@@ -104,48 +108,58 @@ export const requestPaidUpLetter = async (req, res) => {
 
     const requestedItem = typeMap[requestType] || "the requested documentation";
 
-    const emailData = {
-      sender: { name: "MKH Admin", email: process.env.ADMIN_EMAIL },
-      to: [{ email: creditorEmail, name: creditorName }],
-      subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
-      htmlContent: `
-        <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;">
-          <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors & Solutions</h2>
-          <p>Dear <strong>${creditorName}</strong> Team,</p>
-          <p>We are formally requesting <strong>${requestedItem}</strong> for the following client:</p>
-          <div style="background-color: #f4f7f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-            <p style="margin: 5px 0;"><strong>Full Name:</strong> ${client.name}</p>
-            <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
-            <p style="margin: 5px 0;"><strong>Inquiry Type:</strong> ${requestType}</p>
+    // --- LOOP START: SEND INDIVIDUAL PRIVATE EMAILS ---
+    // We loop through the array to ensure Bank A doesn't see Bank B's email
+    for (const email of creditorEmails) {
+      const emailData = {
+        sender: { name: "MKH Admin", email: process.env.ADMIN_EMAIL },
+        to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
+        subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
+        htmlContent: `
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;">
+            <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors & Solutions</h2>
+            <p>Dear <strong>${creditorName || 'Legal'}</strong> Team,</p>
+            <p>We are formally requesting <strong>${requestedItem}</strong> for the following client:</p>
+            <div style="background-color: #f4f7f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Full Name:</strong> ${client.name}</p>
+              <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
+              <p style="margin: 5px 0;"><strong>Inquiry Type:</strong> ${requestType}</p>
+            </div>
+            <p>Please review your records and reply to this email (<em>${process.env.ADMIN_EMAIL}</em>) with the requested documentation attached.</p>
+            <br>
+            <p>Regards,</p>
+            <p><strong>Admin Department</strong><br/>MKH Debtors & Solutions</p>
           </div>
-          <p>Please review your records and reply to this email (<em>${process.env.ADMIN_EMAIL}</em>) with the requested documentation attached.</p>
-          <br>
-          <p>Regards,</p>
-          <p><strong>Admin Department</strong><br/>MKH Debtors & Solutions</p>
-        </div>
-      `
-    };
+        `
+      };
 
-    await apiInstance.sendTransacEmail(emailData);
+      // Execute send for this specific recipient
+      await apiInstance.sendTransacEmail(emailData);
+    }
+    // --- LOOP END ---
 
+    // 4. Create single database log for the entire action
     const newRequest = await DocumentRequest.create({
       client: client._id,
       clientName: client.name,
       idNumber: idNumber,
-      creditorName: creditorName,
-      creditorEmail: creditorEmail,
+      creditorName: creditorName || "Multiple Creditors",
+      creditorEmail: creditorEmails.join(', '), // Store all recipients in one field
       requestType: requestType, 
       status: 'Pending'
     });
 
-    res.status(200).json({ success: true, message: `${requestType} request sent successfully.`, data: newRequest });
+    res.status(200).json({ 
+      success: true, 
+      message: `${requestType} requests dispatched individually to ${creditorEmails.length} recipients.`, 
+      data: newRequest 
+    });
 
   } catch (error) {
     console.error("DETAILED ERROR:", error.response?.data || error.message);
     res.status(500).json({ success: false, message: "Failed to process document request." });
   }
 };
-
 /**
  * 3. GET WHATSAPP SERVICE REQUESTS
  */
