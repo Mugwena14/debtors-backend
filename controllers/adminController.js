@@ -91,11 +91,9 @@ export const handleAdminReplyEmail = async (req, res) => {
  * Sends individual private emails to each recipient and logs to DB
  */
 export const requestPaidUpLetter = async (req, res) => {
-  // When using FormData, arrays are often sent as JSON strings
   const { idNumber, creditorName, requestType = 'Paid-Up' } = req.body;
   
   try {
-    // Parse emails if they come in as a string
     const creditorEmails = typeof req.body.creditorEmails === 'string' 
       ? JSON.parse(req.body.creditorEmails) 
       : req.body.creditorEmails;
@@ -118,17 +116,18 @@ export const requestPaidUpLetter = async (req, res) => {
     const emailAttachments = [];
     
     if (req.files) {
-      // Handle 'idFile'
+      // 1. Handle ID File
       if (req.files['idFile'] && req.files['idFile'][0]) {
         emailAttachments.push({
           name: `ID_Document_${client.name.replace(/\s/g, '_')}.pdf`,
           content: req.files['idFile'][0].buffer.toString("base64")
         });
       }
-      // Handle 'poaFile'
+      // 2. Handle POA File (Updated Labeling)
       if (req.files['poaFile'] && req.files['poaFile'][0]) {
         emailAttachments.push({
-          name: `Proof_of_Address_${client.name.replace(/\s/g, '_')}.pdf`,
+          // Renamed file for the recipient's view
+          name: `Power_of_Attorney_${client.name.replace(/\s/g, '_')}.pdf`, 
           content: req.files['poaFile'][0].buffer.toString("base64")
         });
       }
@@ -144,22 +143,29 @@ export const requestPaidUpLetter = async (req, res) => {
         subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
         htmlContent: `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;">
-            <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors & Solutions</h2>
+            <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors Associates PTY LTD</h2>
             <p>Dear <strong>${creditorName || 'Legal'}</strong> Team,</p>
             <p>We represent <strong>${client.name}</strong> and are formally requesting <strong>${requestedItem}</strong>.</p>
+            
             <div style="background-color: #f4f7f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Full Name:</strong> ${client.name}</p>
               <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
               <p style="margin: 5px 0;"><strong>Inquiry Type:</strong> ${requestType}</p>
             </div>
-            <p><strong>Please find the attached ID and Proof of Address for verification.</strong></p>
-            <p>Please review your records and reply to this email with the requested documentation.</p>
+
+            <p><strong>Verification Attached:</strong></p>
+            <ul>
+              <li>Certified Copy of ID</li>
+              <li>Signed Power of Attorney (POA)</li>
+            </ul>
+
+            <p>Please review your records and reply to this email with the requested documentation to facilitate the account update.</p>
             <br>
             <p>Regards,</p>
-            <p><strong>Admin Department</strong><br/>MKH Debtors & Solutions</p>
+            <p><strong>Admin Department</strong><br/>MKH Debtors Associates PTY LTD</p>
           </div>
         `,
-        attachment: emailAttachments // ID and POA attached here
+        attachment: emailAttachments 
       };
 
       await apiInstance.sendTransacEmail(emailData);
@@ -178,7 +184,7 @@ export const requestPaidUpLetter = async (req, res) => {
 
     res.status(200).json({ 
       success: true, 
-      message: `${requestType} requests with attachments sent to ${creditorEmails.length} recipients.`, 
+      message: `${requestType} requests with POA and ID sent to ${creditorEmails.length} recipients.`, 
       data: newRequest 
     });
 
