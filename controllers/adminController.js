@@ -91,9 +91,15 @@ export const handleAdminReplyEmail = async (req, res) => {
  * Sends individual private emails to each recipient and logs to DB
  */
 export const requestPaidUpLetter = async (req, res) => {
-  const { idNumber, creditorName, creditorEmails, requestType = 'Paid-Up' } = req.body;
-
+  // When using FormData, arrays are often sent as JSON strings
+  const { idNumber, creditorName, requestType = 'Paid-Up' } = req.body;
+  
   try {
+    // Parse emails if they come in as a string
+    const creditorEmails = typeof req.body.creditorEmails === 'string' 
+      ? JSON.parse(req.body.creditorEmails) 
+      : req.body.creditorEmails;
+
     const client = await Client.findOne({ idNumber });
     if (!client) {
       return res.status(404).json({ success: false, message: "Client ID not found in database." });
@@ -108,9 +114,30 @@ export const requestPaidUpLetter = async (req, res) => {
 
     const requestedItem = typeMap[requestType] || "the requested documentation";
 
+    // --- PREPARE ATTACHMENTS (ID & POA) ---
+    const emailAttachments = [];
+    
+    if (req.files) {
+      // Handle 'idFile'
+      if (req.files['idFile'] && req.files['idFile'][0]) {
+        emailAttachments.push({
+          name: `ID_Document_${client.name.replace(/\s/g, '_')}.pdf`,
+          content: req.files['idFile'][0].buffer.toString("base64")
+        });
+      }
+      // Handle 'poaFile'
+      if (req.files['poaFile'] && req.files['poaFile'][0]) {
+        emailAttachments.push({
+          name: `Proof_of_Address_${client.name.replace(/\s/g, '_')}.pdf`,
+          content: req.files['poaFile'][0].buffer.toString("base64")
+        });
+      }
+    }
+
     // --- LOOP START: SEND INDIVIDUAL PRIVATE EMAILS ---
-    // We loop through the array to ensure Bank A doesn't see Bank B's email
     for (const email of creditorEmails) {
+      if (!email) continue;
+      
       const emailData = {
         sender: { name: "MKH Admin", email: process.env.ADMIN_EMAIL },
         to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
@@ -119,45 +146,45 @@ export const requestPaidUpLetter = async (req, res) => {
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;">
             <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors & Solutions</h2>
             <p>Dear <strong>${creditorName || 'Legal'}</strong> Team,</p>
-            <p>We are formally requesting <strong>${requestedItem}</strong> for the following client:</p>
+            <p>We represent <strong>${client.name}</strong> and are formally requesting <strong>${requestedItem}</strong>.</p>
             <div style="background-color: #f4f7f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Full Name:</strong> ${client.name}</p>
               <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
               <p style="margin: 5px 0;"><strong>Inquiry Type:</strong> ${requestType}</p>
             </div>
-            <p>Please review your records and reply to this email (<em>${process.env.ADMIN_EMAIL}</em>) with the requested documentation attached.</p>
+            <p><strong>Please find the attached ID and Proof of Address for verification.</strong></p>
+            <p>Please review your records and reply to this email with the requested documentation.</p>
             <br>
             <p>Regards,</p>
             <p><strong>Admin Department</strong><br/>MKH Debtors & Solutions</p>
           </div>
-        `
+        `,
+        attachment: emailAttachments // ID and POA attached here
       };
 
-      // Execute send for this specific recipient
       await apiInstance.sendTransacEmail(emailData);
     }
-    // --- LOOP END ---
 
-    // 4. Create single database log for the entire action
+    // 4. Create database log
     const newRequest = await DocumentRequest.create({
       client: client._id,
       clientName: client.name,
       idNumber: idNumber,
       creditorName: creditorName || "Multiple Creditors",
-      creditorEmail: creditorEmails.join(', '), // Store all recipients in one field
+      creditorEmail: creditorEmails.join(', '),
       requestType: requestType, 
       status: 'Pending'
     });
 
     res.status(200).json({ 
       success: true, 
-      message: `${requestType} requests dispatched individually to ${creditorEmails.length} recipients.`, 
+      message: `${requestType} requests with attachments sent to ${creditorEmails.length} recipients.`, 
       data: newRequest 
     });
 
   } catch (error) {
     console.error("DETAILED ERROR:", error.response?.data || error.message);
-    res.status(500).json({ success: false, message: "Failed to process document request." });
+    res.status(500).json({ success: false, message: "Failed to process document request with attachments." });
   }
 };
 /**
