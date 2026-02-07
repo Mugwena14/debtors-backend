@@ -28,7 +28,7 @@ const uploadDisk = multer({ storage: diskStorage });
 const memoryStorage = multer.memoryStorage();
 const uploadMemory = multer({ 
   storage: memoryStorage,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit for emails
+  limits: { fileSize: 10 * 1024 * 1024 } // Bumped to 10MB to handle two PDFs comfortably
 });
 
 // --- API ENDPOINTS (FOR REACT FRONTEND) ---
@@ -40,8 +40,16 @@ router.post('/send-client-email', uploadMemory.single('attachment'), handleAdmin
 
 /**
  * @route   POST /api/admin/request-document
+ * UPDATED: Added .fields() to capture the ID and POA files specifically
  */
-router.post('/request-document', requestPaidUpLetter);
+router.post(
+  '/request-document', 
+  uploadMemory.fields([
+    { name: 'idFile', maxCount: 1 },
+    { name: 'poaFile', maxCount: 1 }
+  ]), 
+  requestPaidUpLetter
+);
 
 /**
  * @route   GET /api/admin/logs
@@ -60,8 +68,6 @@ router.put('/upload-document/:requestId', uploadDisk.single('paidUpLetter'), upl
 
 /**
  * @route   PATCH /api/admin/update-request-status/:requestId
- * @desc    Update status manually. Changed to PATCH and updated path to match Frontend Axios call.
- * We use :requestId as the param name to match your controller logic.
  */
 router.patch('/update-request-status/:requestId', updateDocumentStatus);
 
