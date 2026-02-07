@@ -2,6 +2,7 @@ import twilio from 'twilio';
 import mongoose from 'mongoose';
 import Client from '../models/Client.js';
 import ServiceRequest from '../models/serviceRequest.js';
+import apiInstance from "../config/brevo.js";
 
 // Service Imports
 import { handlePaidUpService } from '../services/paidUpService.js';
@@ -314,7 +315,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
         let normalizedType = serviceType;
         if (!validTypes.includes(normalizedType)) normalizedType = 'FILE_UPDATE';
 
-        await ServiceRequest.create({
+        const newRequest = await ServiceRequest.create({
             clientId: client._id,
             clientName: client.name,
             clientPhone: client.phoneNumber,
@@ -324,7 +325,6 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 creditorName: requestData?.creditorName || 'N/A',
                 paymentPreference: requestData?.paymentPreference || 'N/A',
                 requestIdNumber: requestData?.requestIdNumber || client.idNumber,
-                // Wrapping URLs with forceDownload
                 popUrl: forceDownload(requestData?.popUrl),
                 poaUrl: forceDownload(requestData?.poaUrl),
                 porUrl: forceDownload(requestData?.porUrl),
@@ -332,8 +332,51 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
                 allPhotos: (requestData?.mediaUrls || []).map(url => forceDownload(url))
             }
         });
-        console.log(`✅ Saved ${normalizedType} to database with download links.`);
+
+        console.log(`✅ Saved ${normalizedType} to database.`);
+
+        // --- 2. SEND NOTIFICATIONS ---
+
+        const readableType = normalizedType.replace(/_/g, ' ');
+
+        // A. Email to Client
+        if (client.email) {
+            await apiInstance.sendTransacEmail({
+                sender: { name: "MKH Debtors Associates PTY LTD", email: process.env.ADMIN_EMAIL },
+                to: [{ email: client.email, name: client.name }],
+                subject: `Service Request Received: ${readableType}`,
+                htmlContent: `
+                    <div style="font-family: Arial, sans-serif; color: #333;">
+                        <h2 style="color: #00B4D8;">Request Received</h2>
+                        <p>Hi ${client.name},</p>
+                        <p>We've received your WhatsApp request for <strong>${readableType}</strong> regarding <strong>${requestData?.creditorName || 'N/A'}</strong>.</p>
+                        <p>Our team is reviewing your information and will be in touch shortly.</p>
+                        <br>
+                        <p style="font-size: 12px; color: #777;">Reference: ${client.phoneNumber}</p>
+                    </div>
+                `
+            }).catch(e => console.error("Client Email Error:", e.message));
+        }
+
+        // B. Email Alert to Admin
+        await apiInstance.sendTransacEmail({
+            sender: { name: "MKH WhatsApp Bot", email: process.env.ADMIN_EMAIL },
+            to: [{ email: process.env.ADMIN_EMAIL }], 
+            subject: `🚨 NEW WHATSAPP REQUEST: ${readableType}`,
+            htmlContent: `
+                <div style="font-family: Arial, sans-serif; border-left: 5px solid #00B4D8; padding: 20px; background: #f4f4f4;">
+                    <h2 style="color: #111;">New Chatbot Request</h2>
+                    <p><strong>Client:</strong> ${client.name}</p>
+                    <p><strong>Phone:</strong> ${client.phoneNumber}</p>
+                    <p><strong>Service:</strong> ${readableType}</p>
+                    <p><strong>Creditor:</strong> ${requestData?.creditorName || 'N/A'}</p>
+                    <hr>
+                    <p>Log in to the admin dashboard to process this request.</p>
+                </div>
+            `
+        }).catch(e => console.error("Admin Alert Error:", e.message));
+
     } catch (err) { 
-        console.error("❌ DB Save Error:", err.message); 
+        console.error("❌ DB/Notification Error:", err.message); 
     }
 }
