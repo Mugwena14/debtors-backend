@@ -3,6 +3,8 @@ import DocumentRequest from '../models/DocumentRequest.js';
 import Client from '../models/Client.js';
 import ServiceRequest from '../models/serviceRequest.js'; 
 
+const OFFICIAL_ADMIN_EMAIL = "admin@mkhdebtors.co.za";
+
 /**
  * 1. SEND MANUAL EMAIL REPLY & LOG TO DATABASE
  */
@@ -18,7 +20,7 @@ export const handleAdminReplyEmail = async (req, res) => {
       : null;
 
     const emailData = {
-      sender: { name: "MKH Debtors Admin", email: process.env.ADMIN_EMAIL },
+      sender: { name: "MKH Debtors Admin", email: OFFICIAL_ADMIN_EMAILL },
       to: [{ email: to }],
       subject: subject || "Update regarding your request",
       htmlContent: `
@@ -138,7 +140,7 @@ export const requestPaidUpLetter = async (req, res) => {
       if (!email) continue;
       
       const emailData = {
-        sender: { name: "MKH Admin", email: process.env.ADMIN_EMAIL },
+        sender: { name: "MKH Admin", email: OFFICIAL_ADMIN_EMAIL },
         to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
         subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
         htmlContent: `
