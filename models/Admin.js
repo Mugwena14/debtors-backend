@@ -7,10 +7,14 @@ const adminSchema = new mongoose.Schema({
 });
 
 // Hash password before saving
-adminSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+adminSchema.pre('save', async function() {
+  // If the password hasn't been modified, just exit the function
+  if (!this.isModified('password')) return;
+
+  // Hash the password and replace the plain text one
   this.password = await bcrypt.hash(this.password, 12);
-  next();
+  
+  // No next() needed here because the function is async
 });
 
 export default mongoose.model('Admin', adminSchema);
