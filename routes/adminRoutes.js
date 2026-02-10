@@ -1,8 +1,8 @@
 import express from 'express';
 import multer from 'multer';
 import { protect } from '../middleware/auth.js';
+import { login } from '../controllers/authController.js'; // Import login from authController
 import { 
-  adminLogin, // Added this import
   requestPaidUpLetter, 
   uploadReceivedDocument, 
   getAllDocumentRequests,
@@ -15,7 +15,9 @@ import {
 
 const router = express.Router();
 
-// --- MULTER CONFIGURATION ---
+// --- MULTER CONFIGURATIONS ---
+
+// Disk Storage: For permanent document uploads
 const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/docs/');
@@ -26,21 +28,23 @@ const diskStorage = multer.diskStorage({
 });
 const uploadDisk = multer({ storage: diskStorage });
 
+// Memory Storage: For temporary processing (like email attachments)
 const memoryStorage = multer.memoryStorage();
 const uploadMemory = multer({ 
   storage: memoryStorage,
   limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
-// --- PUBLIC API ENDPOINTS ---
+// --- PUBLIC ROUTES ---
 
 /**
  * @route   POST /api/admin/login
- * @desc    Authenticate admin & get token
+ * @desc    Admin authentication - Must be public (no protect middleware)
  */
-router.post('/login', adminLogin); // No 'protect' middleware here!
+router.post('/login', login);
 
 // --- PROTECTED API ENDPOINTS ---
+// All routes below this line require a valid Bearer Token
 
 /**
  * @route   POST /api/admin/send-client-email
