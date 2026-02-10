@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { protect } from '../middleware/auth.js';
 import { 
+  adminLogin, // Added this import
   requestPaidUpLetter, 
   uploadReceivedDocument, 
   getAllDocumentRequests,
@@ -14,6 +15,7 @@ import {
 
 const router = express.Router();
 
+// --- MULTER CONFIGURATION ---
 const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/docs/');
@@ -24,12 +26,19 @@ const diskStorage = multer.diskStorage({
 });
 const uploadDisk = multer({ storage: diskStorage });
 
-// 2. MEMORY STORAGE: For temporary email attachments
 const memoryStorage = multer.memoryStorage();
 const uploadMemory = multer({ 
   storage: memoryStorage,
   limits: { fileSize: 10 * 1024 * 1024 } 
 });
+
+// --- PUBLIC API ENDPOINTS ---
+
+/**
+ * @route   POST /api/admin/login
+ * @desc    Authenticate admin & get token
+ */
+router.post('/login', adminLogin); // No 'protect' middleware here!
 
 // --- PROTECTED API ENDPOINTS ---
 
