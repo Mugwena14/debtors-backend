@@ -20,8 +20,9 @@ export const handlePaidUpService = async (client, incomingMsg, mediaUrl, content
       };
 
     case 'AWAITING_POA_UPLOAD':
-      if (!mediaUrl || !contentType || !contentType.startsWith('application/')) {
-        return { text: "❌ Please upload the signed POA as a *Document* (click '+' -> 'Document')." };
+      // UPDATED: Check for 'image/' instead of 'application/'
+      if (!mediaUrl || !contentType || !contentType.startsWith('image/')) {
+        return { text: "❌ Please upload a *Photo* of the signed POA (click '+' -> 'Gallery' or 'Camera')." };
       }
       
       const poaUrl = await uploadToCloudinary(mediaUrl, `POA_${client.tempRequest.requestIdNumber}_${Date.now()}`);
@@ -29,11 +30,12 @@ export const handlePaidUpService = async (client, incomingMsg, mediaUrl, content
       client.sessionState = 'AWAITING_POR_UPLOAD';
       client.tempRequest.lastActivity = new Date();
       
-      return { text: "✅ POA Received. Now, please upload your *Proof of Residence* as a Document." };
+      return { text: "✅ POA Photo Received. Now, please upload a *Photo* of your *Proof of Residence*." };
 
     case 'AWAITING_POR_UPLOAD':
-      if (!mediaUrl || !contentType || !contentType.startsWith('application/')) {
-        return { text: "❌ Please upload your *Proof of Residence* as a 'Document' file." };
+      // UPDATED: Check for 'image/' instead of 'application/'
+      if (!mediaUrl || !contentType || !contentType.startsWith('image/')) {
+        return { text: "❌ Please upload your *Proof of Residence* as a *Photo*." };
       }
       
       const porUrl = await uploadToCloudinary(mediaUrl, `POR_${client.tempRequest.requestIdNumber}_${Date.now()}`);
@@ -43,7 +45,7 @@ export const handlePaidUpService = async (client, incomingMsg, mediaUrl, content
         { docType: `POR - ${client.tempRequest.creditorName}`, url: porUrl }
       );
 
-      const successMsg = `🎉 *Request Submitted Successfully!* \n\nThank you, ${client.name}. We have received your documents*. \n\nOur admin team will verify everything and reach out to you soon. Have a great day! 👋`;
+      const successMsg = `🎉 *Request Submitted Successfully!* \n\nThank you, ${client.name}. We have received your photos. \n\nOur admin team will verify everything and reach out to you soon. Have a great day! 👋`;
       
       client.tempRequest = { creditorName: '', requestIdNumber: '', poaUrl: '', porUrl: '' };
       client.sessionState = 'MAIN_MENU';
