@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import { protect } from '../middleware/auth.js';
 import { 
   requestPaidUpLetter, 
   uploadReceivedDocument, 
@@ -13,7 +14,6 @@ import {
 
 const router = express.Router();
 
-// 1. DISK STORAGE: For permanent document uploads (PDFs from creditors)
 const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/docs/');
@@ -24,26 +24,31 @@ const diskStorage = multer.diskStorage({
 });
 const uploadDisk = multer({ storage: diskStorage });
 
-// 2. MEMORY STORAGE: For temporary email attachments sent via Brevo
+// 2. MEMORY STORAGE: For temporary email attachments
 const memoryStorage = multer.memoryStorage();
 const uploadMemory = multer({ 
   storage: memoryStorage,
-  limits: { fileSize: 10 * 1024 * 1024 } // Bumped to 10MB to handle two PDFs comfortably
+  limits: { fileSize: 10 * 1024 * 1024 } 
 });
 
-// --- API ENDPOINTS (FOR REACT FRONTEND) ---
+// --- PROTECTED API ENDPOINTS ---
 
 /**
  * @route   POST /api/admin/send-client-email
  */
-router.post('/send-client-email', uploadMemory.single('attachment'), handleAdminReplyEmail);
+router.post(
+  '/send-client-email', 
+  protect, 
+  uploadMemory.single('attachment'), 
+  handleAdminReplyEmail
+);
 
 /**
  * @route   POST /api/admin/request-document
- * UPDATED: Added .fields() to capture the ID and POA files specifically
  */
 router.post(
   '/request-document', 
+  protect, 
   uploadMemory.fields([
     { name: 'idFile', maxCount: 1 },
     { name: 'poaFile', maxCount: 1 }
@@ -54,31 +59,36 @@ router.post(
 /**
  * @route   GET /api/admin/logs
  */
-router.get('/logs', getAllDocumentRequests);
+router.get('/logs', protect, getAllDocumentRequests);
 
 /**
  * @route   GET /api/admin/whatsapp-requests
  */
-router.get('/whatsapp-requests', getWhatsAppRequests);
+router.get('/whatsapp-requests', protect, getWhatsAppRequests);
 
 /**
  * @route   PUT /api/admin/upload-document/:requestId
  */
-router.put('/upload-document/:requestId', uploadDisk.single('paidUpLetter'), uploadReceivedDocument);
+router.put(
+  '/upload-document/:requestId', 
+  protect, 
+  uploadDisk.single('paidUpLetter'), 
+  uploadReceivedDocument
+);
 
 /**
  * @route   PATCH /api/admin/update-request-status/:requestId
  */
-router.patch('/update-request-status/:requestId', updateDocumentStatus);
+router.patch('/update-request-status/:requestId', protect, updateDocumentStatus);
 
 /**
  * @route   DELETE /api/admin/delete-request/:requestId
  */
-router.delete('/delete-request/:requestId', deleteDocumentRequest);
+router.delete('/delete-request/:requestId', protect, deleteDocumentRequest);
 
 /**
  * @route   GET /api/admin/stats
  */
-router.get('/stats', getDashboardStats);
+router.get('/stats', protect, getDashboardStats);
 
 export default router;
