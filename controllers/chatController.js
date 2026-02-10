@@ -260,27 +260,38 @@ export const handleIncomingMessage = async (req, res) => {
             }
 
             if (serviceResponse.action === 'COMPLETE') {
-                const snapshotData = JSON.parse(JSON.stringify(client.tempRequest));
-                const confirmedType = snapshotData.serviceType || 'FILE_UPDATE';
-                
-                await saveRequestToDatabase(client, confirmedType, snapshotData);
-
-                let summary = `📝 *Request Summary*\n` +
-                              `━━━━━━━━━━━━━━\n` +
-                              `📍 *Service:* ${confirmedType.replace(/_/g, ' ')}\n` +
-                              `🏢 *Creditor:* ${snapshotData.creditorName || 'N/A'}\n`;
-                
-                if (snapshotData.paymentPreference && snapshotData.paymentPreference !== 'N/A') {
-                    summary += `💳 *Payment:* ${snapshotData.paymentPreference}\n`;
-                }
-
-                summary += `✅ *Status:* Submitted for Review\n\n` +
-                           (serviceResponse.text || "") + `\n\nReply *0* for Main Menu.`;
-                
-                client.sessionState = 'MAIN_MENU';
-                client.tempRequest = {}; 
-                twiml.message(summary);
-            } else {
+            // 1. Snapshot the data BEFORE resetting anything
+            const snapshotData = JSON.parse(JSON.stringify(client.tempRequest));
+            
+            // 2. Identify the service type (priority: snapshot > client state > default)
+            let confirmedType = snapshotData.serviceType;
+            if (!confirmedType) {
+                if (client.sessionState === 'AWAITING_CAR_DOCS') confirmedType = 'CAR_APPLICATION';
+                else confirmedType = 'FILE_UPDATE';
+            }
+            
+            // 3. Save to Database
+            await saveRequestToDatabase(client, confirmedType, snapshotData);
+        
+            // 4. Create the Summary Message
+            let summary = `📝 *Request Summary*\n` +
+                          `━━━━━━━━━━━━━━\n` +
+                          `📍 *Service:* ${confirmedType.replace(/_/g, ' ')}\n` +
+                          `🏢 *Creditor:* ${snapshotData.creditorName || 'N/A'}\n`;
+            
+            if (snapshotData.paymentPreference && snapshotData.paymentPreference !== 'N/A') {
+                summary += `💳 *Payment:* ${snapshotData.paymentPreference}\n`;
+            }
+        
+            summary += `✅ *Status:* Submitted for Review\n\n` +
+                       (serviceResponse.text || "") + `\n\nReply *0* for Main Menu.`;
+            
+            // 5. NOW clean up the session and temp data
+            client.sessionState = 'MAIN_MENU';
+            client.tempRequest = {}; 
+            
+            twiml.message(summary);
+        } else {
                 twiml.message(serviceResponse.text);
             }
         }
