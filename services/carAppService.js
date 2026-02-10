@@ -1,83 +1,66 @@
 import { uploadToCloudinary } from '../utils/cloudinary.js';
 
 export const handleCarAppService = async (client, mediaUrl, contentType, body) => {
-  // Ensure tempRequest and mediaUrls array exist
-  if (!client.tempRequest) client.tempRequest = {};
-  if (!client.tempRequest.mediaUrls) {
-    client.tempRequest.mediaUrls = [];
-  }
-
-  const incomingText = body?.toLowerCase()?.trim();
-
-  // 1. Check if user is trying to finish manually
-  if (incomingText === 'done' || incomingText === '10') {
-    if (client.tempRequest.mediaUrls.length === 0) {
-      return { text: "⚠️ You haven't uploaded any documents yet. Please send photos of your Bank Statements, Payslips, and ID." };
+    // 1. Initialize tempRequest properly
+    if (!client.tempRequest) client.tempRequest = {};
+    if (!client.tempRequest.mediaUrls) {
+        client.tempRequest.mediaUrls = [];
     }
-    return finishApplication(client);
-  }
 
-  // 2. Validate Image Upload
-  // Since you only want photos, we stick to image/ check
-  if (!mediaUrl) {
-      return { text: "❌ Please upload a *Photo* (Bank Statement, Payslip, or ID). Reply *DONE* when finished." };
-  }
+    const incomingText = body?.toLowerCase()?.trim();
 
-  if (!contentType?.startsWith('image/')) {
-    return { text: "❌ Invalid file type. Please send the document as a *Photo* (Image)." };
-  }
-
-  // 3. Process the Image
-  try {
-    const imgUrl = await uploadToCloudinary(mediaUrl, `CAR_APP_${client.idNumber || client.clientPhone}_${Date.now()}`);
-
-    // Save URL to the array
-    client.tempRequest.mediaUrls.push(imgUrl);
-    
-    // IMPORTANT: Tell Mongoose the nested array changed
-    client.markModified('tempRequest');
-    client.markModified('tempRequest.mediaUrls');
-
-    const count = client.tempRequest.mediaUrls.length;
-
-    // 4. Auto-complete if they hit 3 images, otherwise ask for more
-    if (count >= 3) {
+    // 2. Handle the "Finish" triggers
+    // We check this first. If the user types DONE or if they just send text without an image
+    if (incomingText === 'done' || incomingText === '10') {
+        if (client.tempRequest.mediaUrls.length === 0) {
+            return { text: "⚠️ You haven't uploaded any documents yet. Please send photos of your Bank Statements, Payslips, and ID." };
+        }
         return finishApplication(client);
     }
 
-    return { 
-      text: `📸 *Document Received!* (${count}/3)\n\nPlease send the next photo, or reply *DONE* if you are finished.` 
-    };
+    // 3. Handle Image Uploads
+    if (mediaUrl && contentType?.startsWith('image/')) {
+        try {
+            const imgUrl = await uploadToCloudinary(mediaUrl, `CAR_APP_${client.idNumber || client.phoneNumber}_${Date.now()}`);
 
-  } catch (error) {
-    console.error("Car App Upload Error:", error);
-    return { text: "⚠️ There was an error uploading your photo. Please try again." };
-  }
+            // Push to temp array
+            client.tempRequest.mediaUrls.push(imgUrl);
+            
+            // Force Mongoose to see the change in the array
+            client.markModified('tempRequest');
+
+            const count = client.tempRequest.mediaUrls.length;
+
+            // Auto-complete at 4 images (Bank x3 + ID) or just keep asking
+            if (count >= 4) {
+                return finishApplication(client);
+            }
+
+            return { 
+                text: `📸 *Document Received!* (${count} total)\n\nPlease send the next photo. If you are finished, reply *DONE*.` 
+            };
+        } catch (error) {
+            console.error("Car App Upload Error:", error);
+            return { text: "⚠️ Error uploading photo. Please try again." };
+        }
+    }
+
+    // 4. Fallback: If they sent text that wasn't 'done' while in this state
+    return { text: "📸 Please upload your documents as *Photos*. Once finished, reply *DONE*." };
 };
 
-/**
- * Helper to finalize the application and move docs to the client record
- */
 const finishApplication = (client) => {
     const count = client.tempRequest.mediaUrls.length;
     
-    // Move URLs to the permanent client document store
-    client.tempRequest.mediaUrls.forEach(url => {
-      client.documents.push({
-        docType: 'Car Application Document',
-        url: url,
-        dateUploaded: new Date()
-      });
-    });
+    // Explicitly set the service type so saveRequestToDatabase knows what it is
+    client.tempRequest.serviceType = 'CAR_APPLICATION';
+    client.tempRequest.creditorName = 'Vehicle Finance Dept';
 
-    // Clear temp storage and reset state
-    client.tempRequest.mediaUrls = [];
-    client.sessionState = 'MAIN_MENU';
-    client.markModified('documents');
-    client.markModified('tempRequest');
-
+    // We do NOT clear mediaUrls here yet, because saveRequestToDatabase 
+    // in the controller needs to read them from the snapshot right after this returns.
+    
     return { 
-      text: `✅ *Application Submitted Successfully!*\n\nWe have received ${count} documents. Our finance team will review your application and contact you shortly.`, 
-      action: 'COMPLETE' 
+        text: `Application submitted with ${count} documents.`, 
+        action: 'COMPLETE' 
     };
 };
