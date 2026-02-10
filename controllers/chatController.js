@@ -342,7 +342,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
         // A. Email to Client
         if (client.email) {
             await apiInstance.sendTransacEmail({
-                sender: { name: "MKH Debtors Associates PTY LTD", email: process.env.ADMIN_EMAIL },
+                sender: { name: "MKH Debtors Associates PTY LTD", email: OFFICIAL_ADMIN_EMAIL },
                 to: [{ email: client.email, name: client.name }],
                 subject: `Service Request Received: ${readableType}`,
                 htmlContent: `
@@ -360,7 +360,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
 
         // B. Email Alert to Admin
         await apiInstance.sendTransacEmail({
-            sender: { name: "MKH WhatsApp Bot", email: process.env.ADMIN_EMAIL },
+            sender: { name: "MKH WhatsApp Bot", email: OFFICIAL_ADMIN_EMAIL },
             to: [{ email: process.env.ADMIN_EMAIL }], 
             subject: `🚨 NEW WHATSAPP REQUEST: ${readableType}`,
             htmlContent: `
