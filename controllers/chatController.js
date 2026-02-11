@@ -4,6 +4,8 @@ import Client from '../models/Client.js';
 import ServiceRequest from '../models/serviceRequest.js';
 import apiInstance from "../config/brevo.js";
 
+const OFFICIAL_ADMIN_EMAIL = "admin@mkhdebtors.co.za";
+
 // Service Imports
 import { handlePaidUpService } from '../services/paidUpService.js';
 import { handlePrescriptionService } from '../services/prescriptionService.js';
