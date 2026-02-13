@@ -87,9 +87,6 @@ export const handleAdminReplyEmail = async (req, res) => {
 
 /**
  * 2. UNIVERSAL DOCUMENT REQUEST
- */
-/**
- * 2. UNIVERSAL DOCUMENT REQUEST
  * Sends individual private emails to each recipient and logs to DB
  */
 export const requestPaidUpLetter = async (req, res) => {
@@ -105,9 +102,10 @@ export const requestPaidUpLetter = async (req, res) => {
       return res.status(404).json({ success: false, message: "Client ID not found in database." });
     }
 
+    // Map request types to specific phrasing used in the professional templates
     const typeMap = {
-      'Paid-Up': "a Paid-up Letter",
-      'Prescription': "the removal of Prescribed Debt (Prescription)",
+      'Paid-Up': "a Paid-up letter",
+      'Prescription': "a prescription letter in accordance with the Prescription Act 68 of 1969",
       'Debt Review': "the Debt Review Removal Certificate (Form 19)",
       'Defaults': "the removal of Adverse Defaults/Judgments"
     };
@@ -118,17 +116,14 @@ export const requestPaidUpLetter = async (req, res) => {
     const emailAttachments = [];
     
     if (req.files) {
-      // 1. Handle ID File
       if (req.files['idFile'] && req.files['idFile'][0]) {
         emailAttachments.push({
           name: `ID_Document_${client.name.replace(/\s/g, '_')}.pdf`,
           content: req.files['idFile'][0].buffer.toString("base64")
         });
       }
-      // 2. Handle POA File (Updated Labeling)
       if (req.files['poaFile'] && req.files['poaFile'][0]) {
         emailAttachments.push({
-          // Renamed file for the recipient's view
           name: `Power_of_Attorney_${client.name.replace(/\s/g, '_')}.pdf`, 
           content: req.files['poaFile'][0].buffer.toString("base64")
         });
@@ -144,27 +139,33 @@ export const requestPaidUpLetter = async (req, res) => {
         to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
         subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
         htmlContent: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; border: 1px solid #eee; padding: 20px;">
-            <h2 style="color: #00B4D8; border-bottom: 2px solid #00B4D8; padding-bottom: 10px;">MKH Debtors Associates PTY LTD</h2>
-            <p>Dear <strong>${creditorName || 'Legal'}</strong> Team,</p>
-            <p>We represent <strong>${client.name}</strong> and are formally requesting <strong>${requestedItem}</strong>.</p>
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; padding: 20px; border: 1px solid #eee;">
+            <p>Good day,</p>
             
-            <div style="background-color: #f4f7f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Full Name:</strong> ${client.name}</p>
+            <p>I hope this email finds you well.</p>
+            
+            <p>We are writing to request <strong>${requestedItem}</strong> for our client:</p>
+            
+            <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #00B4D8; margin: 20px 0;">
+              <p style="margin: 5px 0;"><strong>Client Name:</strong> ${client.name}</p>
               <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
-              <p style="margin: 5px 0;"><strong>Inquiry Type:</strong> ${requestType}</p>
             </div>
 
-            <p><strong>Verification Attached:</strong></p>
-            <ul>
-              <li>Certified Copy of ID</li>
-              <li>Signed Power of Attorney (POA)</li>
-            </ul>
+            <p>To facilitate this request, we have attached the following documents:</p>
+            <ol>
+              <li>ID Copy</li>
+              <li>Power of Attorney</li>
+            </ol>
 
-            <p>Please review your records and reply to this email with the requested documentation to facilitate the account update.</p>
+            <p>Please process this request at your earliest convenience. If any additional information is required, please do not hesitate to contact us.</p>
+            
+            <p>Thank you for your prompt attention to this matter.</p>
+            
             <br>
-            <p>Regards,</p>
-            <p><strong>Admin Department</strong><br/>MKH Debtors Associates PTY LTD</p>
+            <p>Best regards,</p>
+            <p><strong>Admin Department</strong><br/>
+            MKH Debtors Associates PTY LTD<br/>
+            <span style="color: #777; font-size: 12px;">Official Correspondence</span></p>
           </div>
         `,
         attachment: emailAttachments 
@@ -186,15 +187,16 @@ export const requestPaidUpLetter = async (req, res) => {
 
     res.status(200).json({ 
       success: true, 
-      message: `${requestType} requests with POA and ID sent to ${creditorEmails.length} recipients.`, 
+      message: `${requestType} requests sent successfully to ${creditorEmails.length} recipients.`, 
       data: newRequest 
     });
 
   } catch (error) {
     console.error("DETAILED ERROR:", error.response?.data || error.message);
-    res.status(500).json({ success: false, message: "Failed to process document request with attachments." });
+    res.status(500).json({ success: false, message: "Failed to process document request." });
   }
 };
+
 /**
  * 3. GET WHATSAPP SERVICE REQUESTS
  */
