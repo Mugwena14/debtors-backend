@@ -141,10 +141,18 @@ export const handleIncomingMessage = async (req, res) => {
                     break;
 
                 case '6':
-                case 'SERVICE_DEFAULTS':
-                    client.tempRequest = { serviceType: 'DEFAULT_CLEARING', creditorName: '', paymentPreference: '', lastActivity: new Date() };
+                case 'SERVICE_DISCOUNTS':
+                    client.tempRequest = { 
+                        serviceType: 'SETTLEMENT_DISCOUNT', 
+                        creditorName: '', 
+                        paymentPreference: '', 
+                        lastActivity: new Date() 
+                    };
                     client.sessionState = 'AWAITING_NEGOTIATION_CREDITOR';
-                    twiml.message(`📉 *Defaults On Accounts*\n\nPlease type the *Name of the Creditor* you wish to clear defaults for.`);
+                    twiml.message(
+                        `💰 *Settlement Discounts*\n\n` +
+                        `Please type the *Name of the Creditor* you would like to request a settlement discount from.`
+                    );
                     break;
 
                 case '7':
@@ -312,7 +320,7 @@ async function sendMainMenuButtons(to, name) {
 }
 
 async function sendServicesMenu(to) {
-    const body = `🛠 *Our Services*\n\n2️⃣ Paid Up Letter ✉️\n3️⃣ Prescription Letter 📜\n4️⃣ Credit Report 📊\n5️⃣ Debt Review Removal 🚫\n6️⃣ Defaults On Accounts 📉\n7️⃣ Judgment Removal ⚖️\n8️⃣ Car Finance Application 🚗\n9️⃣ File Updates 📂\n\n0️⃣ *Back* ⬅️`;
+    const body = `🛠 *Our Services*\n\n2️⃣ Paid Up Letter ✉️\n3️⃣ Prescription Letter 📜\n4️⃣ Credit Report 📊\n5️⃣ Debt Review Removal 🚫\n6️⃣ Settlement Discounts 💰\n7️⃣ Judgment Removal ⚖️\n8️⃣ Car Finance Application 🚗\n9️⃣ File Updates 📂\n\n0️⃣ *Back* ⬅️`;
     try { await twilioClient.messages.create({ from: MY_TWILIO_NUMBER, to: to, body: body }); } catch (err) { console.error("Services Menu Error:", err.message); }
 }
 
@@ -320,7 +328,7 @@ async function saveRequestToDatabase(client, serviceType, requestData) {
     try {
         const validTypes = [
             'PAID_UP_LETTER', 'PRESCRIPTION', 'CREDIT_REPORT', 
-            'SETTLEMENT', 'DEFAULT_CLEARING', 'ARRANGEMENT', 
+            'SETTLEMENT_DISCOUNT', 'DEFAULT_CLEARING', 'ARRANGEMENT', 
             'JUDGMENT_REMOVAL', 'CAR_APPLICATION', 
             'DEBT_REVIEW_REMOVAL', 'FILE_UPDATE'
         ];
