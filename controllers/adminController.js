@@ -89,6 +89,10 @@ export const handleAdminReplyEmail = async (req, res) => {
  * 2. UNIVERSAL DOCUMENT REQUEST
  * Sends individual private emails to each recipient and logs to DB
  */
+/**
+ * 2. UNIVERSAL DOCUMENT REQUEST
+ * Sends individual private emails with template-specific wording
+ */
 export const requestPaidUpLetter = async (req, res) => {
   const { idNumber, creditorName, requestType = 'Paid-Up' } = req.body;
   
@@ -102,19 +106,28 @@ export const requestPaidUpLetter = async (req, res) => {
       return res.status(404).json({ success: false, message: "Client ID not found in database." });
     }
 
-    // Map request types to specific phrasing used in the professional templates
-    const typeMap = {
-      'Paid-Up': "a Paid-up letter",
-      'Prescription': "a prescription letter in accordance with the Prescription Act 68 of 1969",
-      'Debt Review': "the Debt Review Removal Certificate (Form 19)",
-      'Defaults': "the removal of Adverse Defaults/Judgments"
-    };
-
-    const requestedItem = typeMap[requestType] || "the requested documentation";
-
-    // --- PREPARE ATTACHMENTS (ID & POA) ---
-    const emailAttachments = [];
+    // --- DYNAMIC PHRASING BASED ON SERVICE TYPE ---
+    let openingStatement = "";
     
+    switch (requestType) {
+      case 'Paid-Up':
+        openingStatement = `We are writing to request a **Paid up letter** for our client's **${client.name}**, the account has been settled in full.`;
+        break;
+      case 'Prescription':
+        openingStatement = `We are writing to request a **prescription letter** for our client **${client.name}** account, in accordance with the **Prescription Act 68 of 1969**.`;
+        break;
+      case 'Discounts':
+        openingStatement = `We are writing to request a **Settlement Discount** for our client **${client.name}**. Please provide the discounted settlement balance to facilitate final payment.`;
+        break;
+      case 'Debt Review':
+        openingStatement = `We are writing to request the **Debt Review Removal Certificate (Form 19)** for our client **${client.name}**.`;
+        break;
+      default:
+        openingStatement = `We are writing to request the relevant documentation for our client **${client.name}** regarding their account.`;
+    }
+
+    // --- PREPARE ATTACHMENTS ---
+    const emailAttachments = [];
     if (req.files) {
       if (req.files['idFile'] && req.files['idFile'][0]) {
         emailAttachments.push({
@@ -130,7 +143,7 @@ export const requestPaidUpLetter = async (req, res) => {
       }
     }
 
-    // --- LOOP START: SEND INDIVIDUAL PRIVATE EMAILS ---
+    // --- LOOP START: SEND INDIVIDUAL EMAILS ---
     for (const email of creditorEmails) {
       if (!email) continue;
       
@@ -144,7 +157,7 @@ export const requestPaidUpLetter = async (req, res) => {
             
             <p>I hope this email finds you well.</p>
             
-            <p>We are writing to request <strong>${requestedItem}</strong> for our client:</p>
+            <p>${openingStatement}</p>
             
             <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #00B4D8; margin: 20px 0;">
               <p style="margin: 5px 0;"><strong>Client Name:</strong> ${client.name}</p>
@@ -164,8 +177,7 @@ export const requestPaidUpLetter = async (req, res) => {
             <br>
             <p>Best regards,</p>
             <p><strong>Admin Department</strong><br/>
-            MKH Debtors Associates PTY LTD<br/>
-            <span style="color: #777; font-size: 12px;">Official Correspondence</span></p>
+            MKH Debtors Associates PTY LTD</p>
           </div>
         `,
         attachment: emailAttachments 
@@ -174,7 +186,7 @@ export const requestPaidUpLetter = async (req, res) => {
       await apiInstance.sendTransacEmail(emailData);
     }
 
-    // 4. Create database log
+    // Log to DB
     const newRequest = await DocumentRequest.create({
       client: client._id,
       clientName: client.name,
@@ -185,18 +197,13 @@ export const requestPaidUpLetter = async (req, res) => {
       status: 'Pending'
     });
 
-    res.status(200).json({ 
-      success: true, 
-      message: `${requestType} requests sent successfully to ${creditorEmails.length} recipients.`, 
-      data: newRequest 
-    });
+    res.status(200).json({ success: true, message: "Request sent successfully.", data: newRequest });
 
   } catch (error) {
-    console.error("DETAILED ERROR:", error.response?.data || error.message);
-    res.status(500).json({ success: false, message: "Failed to process document request." });
+    console.error("ERROR:", error.message);
+    res.status(500).json({ success: false, message: "Failed to process request." });
   }
 };
-
 /**
  * 3. GET WHATSAPP SERVICE REQUESTS
  */
