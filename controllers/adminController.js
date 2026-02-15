@@ -114,22 +114,22 @@ export const requestPaidUpLetter = async (req, res) => {
     switch (requestType) {
       case 'Paid-Up':
       case 'PAID_UP_LETTER':
-        openingStatement = `We are writing to request a **Paid up letter** for our client's **${clientNameUpper}**, the account has been settled in full.`;
+        openingStatement = `We are writing to request a Paid up letter for our client's ${clientNameUpper}, the account has been settled in full.`;
         break;
       case 'Prescription':
       case 'PRESCRIPTION':
-        openingStatement = `We are writing to request a **prescription letter** for our client **${clientNameUpper}** account, in accordance with the **Prescription Act 68 of 1969**.`;
+        openingStatement = `We are writing to request a Prescription letter for our client ${clientNameUpper} account, in accordance with the Prescription Act 68 of 1969.`;
         break;
       case 'Discounts':
       case 'SETTLEMENT_DISCOUNT':
-        openingStatement = `We are writing to request a **Settlement Discount** for our client **${clientNameUpper}**. Please provide the discounted settlement balance to facilitate final payment.`;
+        openingStatement = `We are writing to request a Settlement Discount for our client ${clientNameUpper}. Please provide the discounted settlement balance to facilitate final payment.`;
         break;
       case 'Debt Review':
       case 'DEBT_REVIEW_REMOVAL':
-        openingStatement = `We are writing to request the **Debt Review Removal Certificate (Form 19)** for our client **${clientNameUpper}**.`;
+        openingStatement = `We are writing to request the Debt Review Removal Certificate (Form 19) for our client ${clientNameUpper}.`;
         break;
       default:
-        openingStatement = `We are writing to request the relevant documentation for our client **${clientNameUpper}** regarding their account.`;
+        openingStatement = `We are writing to request the relevant documentation for our client ${clientNameUpper} regarding their account.`;
     }
 
     // --- PREPARE ATTACHMENTS ---
