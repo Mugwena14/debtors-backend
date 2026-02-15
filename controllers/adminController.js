@@ -109,21 +109,27 @@ export const requestPaidUpLetter = async (req, res) => {
     // --- DYNAMIC PHRASING BASED ON SERVICE TYPE ---
     let openingStatement = "";
     
+    const clientNameUpper = client.name.toUpperCase();
+
     switch (requestType) {
       case 'Paid-Up':
-        openingStatement = `We are writing to request a **Paid up letter** for our client's **${client.name}**, the account has been settled in full.`;
+      case 'PAID_UP_LETTER':
+        openingStatement = `We are writing to request a **Paid up letter** for our client's **${clientNameUpper}**, the account has been settled in full.`;
         break;
       case 'Prescription':
-        openingStatement = `We are writing to request a **prescription letter** for our client **${client.name}** account, in accordance with the **Prescription Act 68 of 1969**.`;
+      case 'PRESCRIPTION':
+        openingStatement = `We are writing to request a **prescription letter** for our client **${clientNameUpper}** account, in accordance with the **Prescription Act 68 of 1969**.`;
         break;
       case 'Discounts':
-        openingStatement = `We are writing to request a **Settlement Discount** for our client **${client.name}**. Please provide the discounted settlement balance to facilitate final payment.`;
+      case 'SETTLEMENT_DISCOUNT':
+        openingStatement = `We are writing to request a **Settlement Discount** for our client **${clientNameUpper}**. Please provide the discounted settlement balance to facilitate final payment.`;
         break;
       case 'Debt Review':
-        openingStatement = `We are writing to request the **Debt Review Removal Certificate (Form 19)** for our client **${client.name}**.`;
+      case 'DEBT_REVIEW_REMOVAL':
+        openingStatement = `We are writing to request the **Debt Review Removal Certificate (Form 19)** for our client **${clientNameUpper}**.`;
         break;
       default:
-        openingStatement = `We are writing to request the relevant documentation for our client **${client.name}** regarding their account.`;
+        openingStatement = `We are writing to request the relevant documentation for our client **${clientNameUpper}** regarding their account.`;
     }
 
     // --- PREPARE ATTACHMENTS ---
@@ -148,7 +154,7 @@ export const requestPaidUpLetter = async (req, res) => {
       if (!email) continue;
       
       const emailData = {
-        sender: { name: "MKH Admin", email: OFFICIAL_ADMIN_EMAIL },
+        sender: { name: "MKH Debtors Associates Admin", email: OFFICIAL_ADMIN_EMAIL },
         to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
         subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
         htmlContent: `
@@ -159,11 +165,6 @@ export const requestPaidUpLetter = async (req, res) => {
             
             <p>${openingStatement}</p>
             
-            <div style="background-color: #f9f9f9; padding: 15px; border-left: 4px solid #00B4D8; margin: 20px 0;">
-              <p style="margin: 5px 0;"><strong>Client Name:</strong> ${client.name}</p>
-              <p style="margin: 5px 0;"><strong>ID Number:</strong> ${idNumber}</p>
-            </div>
-
             <p>To facilitate this request, we have attached the following documents:</p>
             <ol>
               <li>ID Copy</li>
