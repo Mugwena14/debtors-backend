@@ -2,6 +2,7 @@ import apiInstance from "../config/brevo.js";
 import DocumentRequest from '../models/DocumentRequest.js';
 import Client from '../models/Client.js';
 import ServiceRequest from '../models/serviceRequest.js'; 
+import nodemailer from 'nodemailer';
 
 const OFFICIAL_ADMIN_EMAIL = "admin@mkhdebtors.co.za";
 
@@ -85,14 +86,23 @@ export const handleAdminReplyEmail = async (req, res) => {
   }
 };
 
-/**
- * 2. UNIVERSAL DOCUMENT REQUEST
- * Sends individual private emails to each recipient and logs to DB
- */
+
 /**
  * 2. UNIVERSAL DOCUMENT REQUEST
  * Sends individual private emails with template-specific wording
  */
+
+// Configure the SMTP transporter
+const transporter = nodemailer.createTransport({
+  host: "smtp-relay.brevo.com",
+  port: 587,
+  secure: false,
+  auth: {
+    user: "mlangaviclyde@gmail.com", 
+    pass: "xsmtpsib-3dd2f9c06dc4e0281139c2ce89ab4b7c0509a839c3273640f831312128cb6455-MHt1ahSDxS1eENPW", 
+  },
+});
+
 export const requestPaidUpLetter = async (req, res) => {
   const { idNumber, creditorName, requestType = 'Paid-Up' } = req.body;
   
@@ -106,64 +116,61 @@ export const requestPaidUpLetter = async (req, res) => {
       return res.status(404).json({ success: false, message: "Client ID not found in database." });
     }
 
-    // --- DYNAMIC PHRASING BASED ON SERVICE TYPE ---
-    let openingStatement = "";
-    
     const clientNameUpper = client.name.toUpperCase();
 
+    // --- DYNAMIC PHRASING BASED ON SERVICE TYPE ---
+    let openingStatement = "";
     switch (requestType) {
       case 'Paid-Up':
       case 'PAID_UP_LETTER':
-        openingStatement = `We are writing to request a Paid up letter for our client's ${clientNameUpper}, the account has been settled in full.`;
+        openingStatement = `We are writing to request a **Paid up letter** for our client's **${clientNameUpper}**, the account has been settled in full.`;
         break;
       case 'Prescription':
       case 'PRESCRIPTION':
-        openingStatement = `We are writing to request a Prescription letter for our client ${clientNameUpper} account, in accordance with the Prescription Act 68 of 1969.`;
+        openingStatement = `We are writing to request a **prescription letter** for our client **${clientNameUpper}** account, in accordance with the **Prescription Act 68 of 1969**.`;
         break;
       case 'Discounts':
       case 'SETTLEMENT_DISCOUNT':
-        openingStatement = `We are writing to request a Settlement Discount for our client ${clientNameUpper}. Please provide the discounted settlement balance to facilitate final payment.`;
+        openingStatement = `We are writing to request a **Settlement Discount** for our client **${clientNameUpper}**. Please provide the discounted settlement balance to facilitate final payment.`;
         break;
       case 'Debt Review':
       case 'DEBT_REVIEW_REMOVAL':
-        openingStatement = `We are writing to request the Debt Review Removal Certificate (Form 19) for our client ${clientNameUpper}.`;
+        openingStatement = `We are writing to request the **Debt Review Removal Certificate (Form 19)** for our client **${clientNameUpper}**.`;
         break;
       default:
-        openingStatement = `We are writing to request the relevant documentation for our client ${clientNameUpper} regarding their account.`;
+        openingStatement = `We are writing to request the relevant documentation for our client **${clientNameUpper}** regarding their account.`;
     }
 
-    // --- PREPARE ATTACHMENTS ---
+    // --- PREPARE ATTACHMENTS FOR NODEMAILER ---
     const emailAttachments = [];
     if (req.files) {
-      if (req.files['idFile'] && req.files['idFile'][0]) {
+      if (req.files['idFile']?.[0]) {
         emailAttachments.push({
-          name: `ID_Document_${client.name.replace(/\s/g, '_')}.pdf`,
-          content: req.files['idFile'][0].buffer.toString("base64")
+          filename: `ID_Document_${client.name.replace(/\s/g, '_')}.pdf`,
+          content: req.files['idFile'][0].buffer
         });
       }
-      if (req.files['poaFile'] && req.files['poaFile'][0]) {
+      if (req.files['poaFile']?.[0]) {
         emailAttachments.push({
-          name: `Power_of_Attorney_${client.name.replace(/\s/g, '_')}.pdf`, 
-          content: req.files['poaFile'][0].buffer.toString("base64")
+          filename: `Power_of_Attorney_${client.name.replace(/\s/g, '_')}.pdf`, 
+          content: req.files['poaFile'][0].buffer
         });
       }
     }
 
-    // --- LOOP START: SEND INDIVIDUAL EMAILS ---
+    // --- LOOP START: SEND INDIVIDUAL EMAILS VIA SMTP ---
     for (const email of creditorEmails) {
       if (!email) continue;
       
-      const emailData = {
-        sender: { name: "MKH Debtors Associates Admin", email: OFFICIAL_ADMIN_EMAIL },
-        to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
-        bcc: [{ email: OFFICIAL_ADMIN_EMAIL, name: "Admin Records" }],
-        subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
-        htmlContent: `
+      const mailOptions = {
+        from: `"MKH Debtors Associates Admin" <${OFFICIAL_ADMIN_EMAIL}>`,
+        to: email.trim(),
+        // No BCC needed here - SMTP will save this to your SENT folder
+        subject: `Official ${requestType} Request: ${clientNameUpper} (${idNumber})`,
+        html: `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; padding: 20px; border: 1px solid #eee;">
             <p>Good day,</p>
-            
             <p>I hope this email finds you well.</p>
-            
             <p>${openingStatement}</p>
             
             <p>To facilitate this request, we have attached the following documents:</p>
@@ -173,39 +180,38 @@ export const requestPaidUpLetter = async (req, res) => {
             </ol>
 
             <p>Please process this request at your earliest convenience. If any additional information is required, please do not hesitate to contact us.</p>
-            
             <p>Thank you for your prompt attention to this matter.</p>
-            
             <br>
             <p>Best regards,</p>
             <p><strong>Admin Department</strong><br/>
             MKH Debtors Associates PTY LTD</p>
           </div>
         `,
-        attachment: emailAttachments 
+        attachments: emailAttachments
       };
 
-      await apiInstance.sendTransacEmail(emailData);
+      await transporter.sendMail(mailOptions);
     }
 
-    // Log to DB
+    // --- LOG TO DATABASE ---
     const newRequest = await DocumentRequest.create({
       client: client._id,
       clientName: client.name,
       idNumber: idNumber,
       creditorName: creditorName || "Multiple Creditors",
-      creditorEmail: creditorEmails.join(', '),
+      creditorEmail: Array.isArray(creditorEmails) ? creditorEmails.join(', ') : creditorEmails,
       requestType: requestType, 
       status: 'Pending'
     });
 
-    res.status(200).json({ success: true, message: "Request sent successfully.", data: newRequest });
+    res.status(200).json({ success: true, message: "Request sent (Check your Sent folder).", data: newRequest });
 
   } catch (error) {
-    console.error("ERROR:", error.message);
-    res.status(500).json({ success: false, message: "Failed to process request." });
+    console.error("SMTP ERROR:", error.message);
+    res.status(500).json({ success: false, message: "Failed to send email through SMTP." });
   }
 };
+
 /**
  * 3. GET WHATSAPP SERVICE REQUESTS
  */
