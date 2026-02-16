@@ -156,6 +156,7 @@ export const requestPaidUpLetter = async (req, res) => {
       const emailData = {
         sender: { name: "MKH Debtors Associates Admin", email: OFFICIAL_ADMIN_EMAIL },
         to: [{ email: email.trim(), name: creditorName || "Collections/Legal" }],
+        bcc: [{ email: OFFICIAL_ADMIN_EMAIL, name: "Admin Records" }],
         subject: `Official ${requestType} Request: ${client.name} (${idNumber})`,
         htmlContent: `
           <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #111; max-width: 600px; padding: 20px; border: 1px solid #eee;">
